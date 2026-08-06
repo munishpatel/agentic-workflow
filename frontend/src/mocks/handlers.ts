@@ -1,11 +1,5 @@
 import { HttpResponse, delay, http } from 'msw'
-import type {
-  RunRequest,
-  SentEmail,
-  Workflow,
-  WorkflowInput,
-  WorkflowSummary,
-} from '@/types/api'
+import type { RunRequest, SentEmail, Workflow, WorkflowInput, WorkflowSummary } from '@/types/api'
 import { createId } from '@/lib/utils'
 import { mockDb, type StoredRun } from './db'
 import {

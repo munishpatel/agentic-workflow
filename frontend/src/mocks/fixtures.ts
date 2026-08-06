@@ -75,9 +75,7 @@ export const NODE_KINDS: NodeKindSpec[] = [
         description: 'Arguments, overriding the literal values configured below.',
       },
     ],
-    outputs: [
-      { name: 'result', type: 'text', required: true, description: 'The tool’s output.' },
-    ],
+    outputs: [{ name: 'result', type: 'text', required: true, description: 'The tool’s output.' }],
     config_schema: {
       type: 'object',
       properties: {
@@ -101,9 +99,7 @@ export const NODE_KINDS: NodeKindSpec[] = [
     kind: 'router',
     label: 'Router',
     description: 'Classifies its input into exactly one route. Only that branch runs.',
-    inputs: [
-      { name: 'input', type: 'text', required: true, description: 'The text to classify.' },
-    ],
+    inputs: [{ name: 'input', type: 'text', required: true, description: 'The text to classify.' }],
     outputs: 'dynamic',
     config_schema: {
       type: 'object',
@@ -284,11 +280,31 @@ const RESEARCH: Workflow = {
     { id: 'n_out', kind: 'output', label: 'Reply', config: {}, position: { x: 900, y: 220 } },
   ],
   edges: [
-    { id: 'e_in_route', source: { node_id: 'n_in', port: 'message' }, target: { node_id: 'n_route', port: 'input' } },
-    { id: 'e_route_research', source: { node_id: 'n_route', port: 'needs_research' }, target: { node_id: 'n_research', port: 'prompt' } },
-    { id: 'e_route_direct', source: { node_id: 'n_route', port: 'direct' }, target: { node_id: 'n_direct', port: 'prompt' } },
-    { id: 'e_research_out', source: { node_id: 'n_research', port: 'text' }, target: { node_id: 'n_out', port: 'response' } },
-    { id: 'e_direct_out', source: { node_id: 'n_direct', port: 'text' }, target: { node_id: 'n_out', port: 'response' } },
+    {
+      id: 'e_in_route',
+      source: { node_id: 'n_in', port: 'message' },
+      target: { node_id: 'n_route', port: 'input' },
+    },
+    {
+      id: 'e_route_research',
+      source: { node_id: 'n_route', port: 'needs_research' },
+      target: { node_id: 'n_research', port: 'prompt' },
+    },
+    {
+      id: 'e_route_direct',
+      source: { node_id: 'n_route', port: 'direct' },
+      target: { node_id: 'n_direct', port: 'prompt' },
+    },
+    {
+      id: 'e_research_out',
+      source: { node_id: 'n_research', port: 'text' },
+      target: { node_id: 'n_out', port: 'response' },
+    },
+    {
+      id: 'e_direct_out',
+      source: { node_id: 'n_direct', port: 'text' },
+      target: { node_id: 'n_out', port: 'response' },
+    },
   ],
   created_at: '2026-07-28T09:12:00.000Z',
   updated_at: '2026-08-02T16:41:00.000Z',
@@ -318,8 +334,16 @@ const MATH: Workflow = {
     { id: 'm_out', kind: 'output', label: 'Reply', config: {}, position: { x: 720, y: 180 } },
   ],
   edges: [
-    { id: 'm_e1', source: { node_id: 'm_in', port: 'message' }, target: { node_id: 'm_agent', port: 'prompt' } },
-    { id: 'm_e2', source: { node_id: 'm_agent', port: 'text' }, target: { node_id: 'm_out', port: 'response' } },
+    {
+      id: 'm_e1',
+      source: { node_id: 'm_in', port: 'message' },
+      target: { node_id: 'm_agent', port: 'prompt' },
+    },
+    {
+      id: 'm_e2',
+      source: { node_id: 'm_agent', port: 'text' },
+      target: { node_id: 'm_out', port: 'response' },
+    },
   ],
   created_at: '2026-07-30T11:02:00.000Z',
   updated_at: '2026-07-31T08:15:00.000Z',
@@ -397,7 +421,11 @@ class EventLog {
     this.push('llm.request', { iteration, model, tool_count: toolCount }, { node_id: nodeId })
   }
   llmResponse(nodeId: string, iteration: number, usage: Usage, stopReason: string, ms: number) {
-    this.push('llm.response', { iteration, usage, stop_reason: stopReason }, { node_id: nodeId, ms })
+    this.push(
+      'llm.response',
+      { iteration, usage, stop_reason: stopReason },
+      { node_id: nodeId, ms },
+    )
   }
   textMessage(nodeId: string, text: string) {
     this.push('text.message', { text }, { node_id: nodeId })
@@ -413,7 +441,11 @@ class EventLog {
     isError: boolean,
     ms: number,
   ) {
-    this.push('tool.result', { call_id: callId, tool, output, is_error: isError, ms }, { node_id: nodeId, ms })
+    this.push(
+      'tool.result',
+      { call_id: callId, tool, output, is_error: isError, ms },
+      { node_id: nodeId, ms },
+    )
   }
   routeDecision(nodeId: string, chosen: string, reason: string, considered: string[]) {
     this.push('route.decision', { chosen, reason, considered }, { node_id: nodeId })

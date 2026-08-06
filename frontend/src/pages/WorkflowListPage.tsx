@@ -6,10 +6,7 @@ import type { WorkflowSummary } from '@/types/api'
 import { EmptyState } from '@/components/common/EmptyState'
 import { ErrorState } from '@/components/common/ErrorState'
 import { PageHeader } from '@/components/common/PageHeader'
-import {
-  NewWorkflowDialog,
-  type NewWorkflowValues,
-} from '@/components/workflow/NewWorkflowDialog'
+import { NewWorkflowDialog, type NewWorkflowValues } from '@/components/workflow/NewWorkflowDialog'
 import { WorkflowCard } from '@/components/workflow/WorkflowCard'
 import {
   AlertDialog,

@@ -174,8 +174,10 @@ export function canConnect(ctx: GraphContext, source: EdgeEnd, target: EdgeEnd):
 
   const sourcePort = portOf(resolvePorts(ctx.specs, sourceNode).outputs, source.port)
   const targetPort = portOf(resolvePorts(ctx.specs, targetNode).inputs, target.port)
-  if (!sourcePort) return { ok: false, reason: `${sourceNode.label} has no output “${source.port}”.` }
-  if (!targetPort) return { ok: false, reason: `${targetNode.label} has no input “${target.port}”.` }
+  if (!sourcePort)
+    return { ok: false, reason: `${sourceNode.label} has no output “${source.port}”.` }
+  if (!targetPort)
+    return { ok: false, reason: `${targetNode.label} has no input “${target.port}”.` }
 
   if (!arePortsCompatible(sourcePort.type, targetPort.type)) {
     return {

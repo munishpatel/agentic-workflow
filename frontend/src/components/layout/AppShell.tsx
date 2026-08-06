@@ -1,8 +1,32 @@
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
-import { Inbox, Workflow } from 'lucide-react'
+import { Inbox, RotateCcw, Workflow } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { clearAllChatSessions } from '@/hooks/useChatSession'
 import { cn } from '@/lib/utils'
+
+/**
+ * Puts the seeded workflows back. Without it, deleting every workflow leaves a
+ * demo with no way home short of clearing site data.
+ *
+ * The mock layer is imported lazily so app code keeps no static dependency on
+ * it — deleting `src/mocks` in phase 6 must not break the shell.
+ */
+async function resetDemoData() {
+  clearAllChatSessions()
+  const { mockDb } = await import('@/mocks/db')
+  mockDb.reset()
+  window.location.assign('/')
+}
 
 const NAV = [
   { to: '/', label: 'Workflows', icon: Workflow, end: true },
@@ -48,9 +72,31 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
 
         {usingMocks && (
-          <Badge variant="secondary" className="ml-auto font-normal" title="VITE_USE_MOCKS=true">
-            Mock API
-          </Badge>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="ml-auto gap-1.5 text-muted-foreground"
+                title="The API is served by MSW in the browser (VITE_USE_MOCKS=true)"
+              >
+                <Badge variant="secondary" className="font-normal">
+                  Mock API
+                </Badge>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="max-w-72">
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                Every request is answered in the browser. Workflows persist in localStorage, chats
+                in sessionStorage.
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={resetDemoData}>
+                <RotateCcw aria-hidden />
+                Reset demo data
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </header>
 

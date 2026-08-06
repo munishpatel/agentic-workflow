@@ -11,13 +11,7 @@ interface EmptyStateProps {
 }
 
 /** Every list in the app has one of these — see the conventions in §10. */
-export function EmptyState({
-  icon: Icon,
-  title,
-  description,
-  action,
-  className,
-}: EmptyStateProps) {
+export function EmptyState({ icon: Icon, title, description, action, className }: EmptyStateProps) {
   return (
     <div
       className={cn(

@@ -37,9 +37,7 @@ export function WorkflowCard({
   onDelete,
   busy = false,
 }: WorkflowCardProps) {
-  const toolNames = workflow.tool_ids.map(
-    (id) => tools.find((tool) => tool.id === id)?.name ?? id,
-  )
+  const toolNames = workflow.tool_ids.map((id) => tools.find((tool) => tool.id === id)?.name ?? id)
 
   return (
     <Card className="transition-shadow hover:ring-foreground/20">
@@ -83,7 +81,7 @@ export function WorkflowCard({
             </DropdownMenuContent>
           </DropdownMenu>
         </CardAction>
-        <CardDescription className="line-clamp-2 min-h-[2.5rem]">
+        <CardDescription className="line-clamp-2 min-h-10">
           {workflow.description ?? 'No description.'}
         </CardDescription>
       </CardHeader>
