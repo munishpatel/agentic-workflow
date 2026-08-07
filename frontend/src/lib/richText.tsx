@@ -1,13 +1,24 @@
 import type { ReactNode } from 'react'
 
 /**
- * A deliberately tiny renderer for model output: paragraphs, bullet lists,
- * `**bold**` and `` `code` ``. Not a markdown implementation — it exists so the
- * final response reads as prose instead of showing its own asterisks, without
- * pulling in a parser or ever touching `dangerouslySetInnerHTML`.
+ * A deliberately tiny renderer for model output: paragraphs, headings, bullet
+ * lists, `**bold**`, `` `code` `` and `[links](url)`. Not a markdown
+ * implementation — it exists so the final response reads as prose instead of
+ * showing its own punctuation, without pulling in a parser or ever touching
+ * `dangerouslySetInnerHTML`.
+ *
+ * Links and headings were added after watching a real research run: the model
+ * cites sources as markdown links and structures long answers with `##`, and
+ * both were showing as raw syntax.
  */
 
-const INLINE = /(\*\*[^*]+\*\*|`[^`]+`)/g
+const INLINE = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\))/g
+const LINK = /^\[([^\]]+)\]\(([^)\s]+)\)$/
+
+/** Only http(s) is followed — never `javascript:` or a data URI from a model. */
+function safeHref(url: string): string | null {
+  return /^https?:\/\//i.test(url) ? url : null
+}
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
   return text.split(INLINE).flatMap((part, index) => {
@@ -27,9 +38,28 @@ function renderInline(text: string, keyPrefix: string): ReactNode[] {
         </code>,
       ]
     }
+    const link = LINK.exec(part)
+    if (link) {
+      const [, label, url] = link
+      const href = safeHref(url ?? '')
+      if (!href) return [<span key={key}>{label}</span>]
+      return [
+        <a
+          key={key}
+          href={href}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="text-foreground underline underline-offset-2 hover:no-underline"
+        >
+          {label}
+        </a>,
+      ]
+    }
     return [<span key={key}>{part}</span>]
   })
 }
+
+const HEADING = /^(#{1,4})\s+(.*)$/
 
 const BULLET = /^\s*[-*]\s+/
 const NUMBERED = /^\s*\d+[.)]\s+/
@@ -41,6 +71,22 @@ export function RichText({ text, className }: { text: string; className?: string
     <div className={className}>
       {blocks.map((block, blockIndex) => {
         const lines = block.split('\n')
+
+        const heading = lines.length === 1 ? HEADING.exec(lines[0] ?? '') : null
+        if (heading) {
+          const level = (heading[1] ?? '#').length
+          return (
+            <p
+              key={blockIndex}
+              className={`mt-4 mb-1 font-semibold first:mt-0 ${
+                level <= 2 ? 'text-[1.05em]' : ''
+              }`}
+            >
+              {renderInline(heading[2] ?? '', `${blockIndex}-h`)}
+            </p>
+          )
+        }
+
         const isList = lines.every((line) => BULLET.test(line) || NUMBERED.test(line))
 
         if (isList) {

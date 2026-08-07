@@ -10,7 +10,7 @@ export function NotFoundPage() {
         The workflow may have been deleted, or the link is wrong.
       </p>
       <Button asChild className="mt-2">
-        <Link to="/">Back to workflows</Link>
+        <Link to="/workflows">Back to workflows</Link>
       </Button>
     </div>
   )

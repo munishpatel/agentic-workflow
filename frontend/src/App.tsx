@@ -1,5 +1,6 @@
 import { Route, Routes } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
+import { WelcomePage } from '@/pages/WelcomePage'
 import { WorkflowListPage } from '@/pages/WorkflowListPage'
 import { WorkflowEditorPage } from '@/pages/WorkflowEditorPage'
 import { ChatPage } from '@/pages/ChatPage'
@@ -10,7 +11,8 @@ export default function App() {
   return (
     <AppShell>
       <Routes>
-        <Route path="/" element={<WorkflowListPage />} />
+        <Route path="/" element={<WelcomePage />} />
+        <Route path="/workflows" element={<WorkflowListPage />} />
         <Route path="/workflows/:id/edit" element={<WorkflowEditorPage />} />
         <Route path="/workflows/:id/chat" element={<ChatPage />} />
         <Route path="/outbox" element={<OutboxPage />} />

@@ -1,4 +1,3 @@
-import { Link } from 'react-router-dom'
 import {
   CheckCircle2,
   ChevronRight,
@@ -25,6 +24,7 @@ interface BuilderTopBarProps {
   onUndo: () => void
   onRedo: () => void
   onOpenChat: () => void
+  onBack: () => void
 }
 
 export function BuilderTopBar({
@@ -39,16 +39,18 @@ export function BuilderTopBar({
   onUndo,
   onRedo,
   onOpenChat,
+  onBack,
 }: BuilderTopBarProps) {
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
       <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1 text-sm">
-        <Link
-          to="/"
+        <button
+          type="button"
+          onClick={onBack}
           className="rounded-sm text-muted-foreground hover:text-foreground hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
         >
           Workflows
-        </Link>
+        </button>
         <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
         <span className="truncate font-medium">{name || 'Untitled'}</span>
       </nav>

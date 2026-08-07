@@ -106,7 +106,15 @@ export const handlers = [
     }
     await delay(240)
     const now = new Date().toISOString()
-    const workflow: Workflow = { ...body, id: createId('wf'), created_at: now, updated_at: now }
+    const workflow: Workflow = {
+      ...body,
+      // The real service normalises an absent description to null; the mock
+      // must too, or the two disagree on a field the UI renders.
+      description: body.description ?? null,
+      id: createId('wf'),
+      created_at: now,
+      updated_at: now,
+    }
     mockDb.insertWorkflow(workflow)
     return HttpResponse.json(workflow, { status: 201 })
   }),
@@ -128,6 +136,7 @@ export const handlers = [
     await delay(360)
     const updated: Workflow = {
       ...body,
+      description: body.description ?? null,
       id: existing.id,
       created_at: existing.created_at,
       updated_at: new Date().toISOString(),

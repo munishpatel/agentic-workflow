@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
-import { Inbox, RotateCcw, Workflow } from 'lucide-react'
+import { Home, Inbox, RotateCcw, Workflow } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -25,11 +25,12 @@ async function resetDemoData() {
   clearAllChatSessions()
   const { mockDb } = await import('@/mocks/db')
   mockDb.reset()
-  window.location.assign('/')
+  window.location.assign('/workflows')
 }
 
 const NAV = [
-  { to: '/', label: 'Workflows', icon: Workflow, end: true },
+  { to: '/', label: 'Welcome', icon: Home, end: true },
+  { to: '/workflows', label: 'Workflows', icon: Workflow, end: false },
   { to: '/outbox', label: 'Outbox', icon: Inbox, end: false },
 ]
 

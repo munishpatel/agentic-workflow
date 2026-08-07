@@ -1,20 +1,73 @@
-// TEMPORARY: hand-authored mirror of the FastAPI contract.
-// Phase 6 replaces this file with openapi-typescript output. Do not add
-// frontend-only types here — those belong in src/types/ui.ts.
+// The API contract, derived from the backend's own OpenAPI schema.
 //
-// Field names are snake_case because the backend is Python and we do not
-// transform casing at the boundary. These types match the wire exactly.
+// `api.generated.ts` is regenerated with `npm run gen:api` and is the single
+// source of truth for every wire shape. This file only gives those schemas the
+// names the app uses, so a backend change that breaks an assumption here shows
+// up as a compile error rather than a runtime surprise.
+//
+// Do not hand-edit shapes here. If something looks wrong, it is a contract
+// question for the backend — fix it there and regenerate.
+// Frontend-only types belong in src/types/ui.ts.
 
+import type { components } from './api.generated'
 import type { RunEvent, Usage } from './events'
 
 export type { RunEvent, Usage }
 
-/* ── JSON Schema ─────────────────────────────────────────────────────────── */
+type Schemas = components['schemas']
+
+/* ── Graph ───────────────────────────────────────────────────────────────── */
+
+export type PortType = 'text' | 'json' | 'number' | 'boolean' | 'any'
+export type NodeKind = Schemas['Node']['kind']
+
+export type PortSpec = {
+  name: string
+  type: PortType
+  required: boolean
+  description: string
+}
+
+export type Position = Schemas['Position']
+export type EdgeEnd = Schemas['EdgeEnd']
+export type Edge = Schemas['Edge']
+
+/**
+ * Named `WorkflowNode` rather than `Node` so it never collides with the DOM's
+ * `Node` at a call site. `config` is optional on the wire (Pydantic gives it a
+ * default) but the editor always writes one, so it is required here.
+ */
+export type WorkflowNode = Omit<Schemas['Node'], 'config' | 'position'> & {
+  config: Record<string, unknown>
+  position: Position
+}
+
+export type Workflow = Omit<Schemas['WorkflowRead'], 'nodes' | 'edges'> & {
+  nodes: WorkflowNode[]
+  edges: Edge[]
+}
+
+export type WorkflowInput = Omit<Schemas['WorkflowInput'], 'nodes' | 'edges'> & {
+  nodes: WorkflowNode[]
+  edges: Edge[]
+}
+
+export type WorkflowSummary = Schemas['WorkflowSummary']
+
+/* ── Validation ──────────────────────────────────────────────────────────── */
+
+export type ValidationIssue = Schemas['ValidationIssue']
+export type ValidationResult = Schemas['ValidationResult']
+
+/* ── Schema discovery ────────────────────────────────────────────────────── */
 
 /**
  * The subset of JSON Schema draft-7 that `NodeConfigForm` understands. The
- * backend emits Pydantic's `model_json_schema()`, which is far richer; anything
- * outside this subset falls back to a raw JSON editor rather than being dropped.
+ * backend emits Pydantic's `model_json_schema()`, which is richer; anything
+ * outside this subset falls back to a raw JSON editor rather than being lost.
+ *
+ * Not derived from the generated file: OpenAPI types `config_schema` as an
+ * opaque object, so this is the frontend's own reading of what arrives in it.
  */
 export interface JSONSchema {
   type?: 'string' | 'number' | 'integer' | 'boolean' | 'array' | 'object' | 'null'
@@ -33,7 +86,6 @@ export interface JSONSchema {
   minItems?: number
   maxItems?: number
   format?: string
-  /** Pydantic emits `$ref`/`$defs` for nested models. */
   $ref?: string
   $defs?: Record<string, JSONSchema>
   anyOf?: JSONSchema[]
@@ -44,80 +96,8 @@ export interface JSONSchema {
   [key: string]: unknown
 }
 
-/* ── Graph ───────────────────────────────────────────────────────────────── */
-
-export type PortType = 'text' | 'json' | 'number' | 'boolean' | 'any'
-
-export interface PortSpec {
-  name: string
-  type: PortType
-  required: boolean
-  description: string
-}
-
-export type NodeKind = 'input' | 'agent' | 'tool' | 'router' | 'output'
-
-export interface Position {
-  x: number
-  y: number
-}
-
-export interface WorkflowNode {
-  /** Stable; referenced by edges. Client-generated on create. */
-  id: string
-  kind: NodeKind
-  label: string
-  /** Shape defined by the kind's `config_schema`. */
-  config: Record<string, unknown>
-  position: Position
-}
-
-export interface EdgeEnd {
-  node_id: string
-  port: string
-}
-
-export interface Edge {
-  id: string
-  source: EdgeEnd
-  target: EdgeEnd
-}
-
-export interface Workflow {
-  id: string
-  name: string
-  description: string | null
-  /** "anthropic" */
-  provider: string
-  /** "claude-opus-5" */
-  model: string
-  /** Graph-wide persona, prepended for every agent node. */
-  system_prompt: string
-  nodes: WorkflowNode[]
-  edges: Edge[]
-  /** ISO 8601 */
-  created_at: string
-  updated_at: string
-}
-
-/** POST/PUT body — the server owns `id` and the timestamps. */
-export type WorkflowInput = Omit<Workflow, 'id' | 'created_at' | 'updated_at'>
-
-export interface WorkflowSummary {
-  id: string
-  name: string
-  description: string | null
-  model: string
-  node_count: number
-  tool_ids: string[]
-  updated_at: string
-}
-
-/* ── Schema discovery ────────────────────────────────────────────────────── */
-
 export interface NodeKindSpec {
   kind: NodeKind
-  /** "Agent" */
   label: string
   description: string
   inputs: PortSpec[]
@@ -126,72 +106,25 @@ export interface NodeKindSpec {
   config_schema: JSONSchema
 }
 
-export interface ToolMeta {
-  /** "calculator" */
-  id: string
-  name: string
-  description: string
+export type ToolMeta = Omit<Schemas['ToolMeta'], 'input_schema'> & {
   input_schema: JSONSchema
 }
 
-export interface ProviderMeta {
-  /** "anthropic" */
-  id: string
-  label: string
-  models: string[]
-}
-
-/* ── Validation ──────────────────────────────────────────────────────────── */
-
-export interface ValidationIssue {
-  /** "missing_output_node" | "cycle_detected" | "port_type_mismatch" | … */
-  code: string
-  message: string
-  node_id?: string
-  edge_id?: string
-}
-
-export interface ValidationResult {
-  valid: boolean
-  errors: ValidationIssue[]
-  warnings: ValidationIssue[]
-}
+export type ProviderMeta = Schemas['ProviderMeta']
 
 /* ── Running ─────────────────────────────────────────────────────────────── */
 
-export interface ChatTurn {
-  role: 'user' | 'assistant'
-  content: string
-}
+export type ChatTurn = Schemas['ChatTurn']
+export type RunRequest = Schemas['RunRequest']
 
-export interface RunRequest {
-  message: string
-  /** Prior turns, oldest first. */
-  history: ChatTurn[]
-}
-
-export interface RunResponse {
-  run_id: string
-  final_response: string
+/**
+ * The generated `events` are the envelope without a per-type payload; the app
+ * narrows them through the discriminated union in `types/events.ts`, which is
+ * what `reduceEvents` switches on.
+ */
+export type RunResponse = Omit<Schemas['RunResponse'], 'events'> & {
   events: RunEvent[]
-  usage: Usage
-  duration_ms: number
 }
 
-export interface RunSummary {
-  run_id: string
-  user_message: string
-  final_response: string
-  created_at: string
-  usage: Usage
-  duration_ms: number
-}
-
-export interface SentEmail {
-  id: string
-  to: string
-  subject: string
-  body: string
-  run_id: string
-  created_at: string
-}
+export type RunSummary = Schemas['RunSummary']
+export type SentEmail = Schemas['SentEmailRead']

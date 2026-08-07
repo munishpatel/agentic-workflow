@@ -149,7 +149,7 @@ export function WorkflowEditorPage() {
       <div className="mx-auto max-w-2xl p-6">
         <ErrorState error={workflow.error} onRetry={() => void workflow.refetch()} />
         <Button asChild variant="outline" className="mt-4">
-          <Link to="/">Back to workflows</Link>
+          <Link to="/workflows">Back to workflows</Link>
         </Button>
       </div>
     )
@@ -195,6 +195,7 @@ export function WorkflowEditorPage() {
         onUndo={undo}
         onRedo={redo}
         onOpenChat={() => leaveTo(`/workflows/${id}/chat`)}
+        onBack={() => leaveTo('/workflows')}
       />
 
       {validation && (
