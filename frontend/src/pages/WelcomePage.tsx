@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/ca
 import { NewWorkflowDialog, type NewWorkflowValues } from '@/components/workflow/NewWorkflowDialog'
 import { describeError } from '@/lib/client'
 import { useCreateWorkflow, useProviders } from '@/lib/queries'
-import { newWorkflowInput } from '@/lib/workflowDefaults'
+import { workflowInputFromDialog } from '@/lib/workflowDefaults'
 
 const FEATURES = [
   {
@@ -38,25 +38,17 @@ export function WelcomePage() {
 
   function handleCreate(values: NewWorkflowValues) {
     const provider = providers.data?.[0]
-    createWorkflow.mutate(
-      newWorkflowInput({
-        name: values.name.trim(),
-        description: values.description,
-        provider: provider?.id,
-        model: provider?.models[0],
-      }),
-      {
-        onSuccess: (workflow) => {
-          setDialogOpen(false)
-          toast.success(`Created “${workflow.name}”`)
-          void navigate(`/workflows/${workflow.id}/edit`)
-        },
-        onError: (error) => {
-          const { title, description } = describeError(error)
-          toast.error(title, { description })
-        },
+    createWorkflow.mutate(workflowInputFromDialog(values, provider), {
+      onSuccess: (workflow) => {
+        setDialogOpen(false)
+        toast.success(`Created “${workflow.name}”`)
+        void navigate(`/workflows/${workflow.id}/edit`)
       },
-    )
+      onError: (error) => {
+        const { title, description } = describeError(error)
+        toast.error(title, { description })
+      },
+    })
   }
 
   return (

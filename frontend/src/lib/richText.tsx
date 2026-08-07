@@ -78,9 +78,7 @@ export function RichText({ text, className }: { text: string; className?: string
           return (
             <p
               key={blockIndex}
-              className={`mt-4 mb-1 font-semibold first:mt-0 ${
-                level <= 2 ? 'text-[1.05em]' : ''
-              }`}
+              className={`mt-4 mb-1 font-semibold first:mt-0 ${level <= 2 ? 'text-[1.05em]' : ''}`}
             >
               {renderInline(heading[2] ?? '', `${blockIndex}-h`)}
             </p>

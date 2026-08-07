@@ -30,7 +30,7 @@ import {
   useTools,
   useWorkflows,
 } from '@/lib/queries'
-import { newWorkflowInput } from '@/lib/workflowDefaults'
+import { workflowInputFromDialog } from '@/lib/workflowDefaults'
 
 function reportError(error: unknown) {
   const { title, description } = describeError(error)
@@ -52,22 +52,14 @@ export function WorkflowListPage() {
 
   function handleCreate(values: NewWorkflowValues) {
     const provider = providers.data?.[0]
-    createWorkflow.mutate(
-      newWorkflowInput({
-        name: values.name.trim(),
-        description: values.description,
-        provider: provider?.id,
-        model: provider?.models[0],
-      }),
-      {
-        onSuccess: (workflow) => {
-          setDialogOpen(false)
-          toast.success(`Created “${workflow.name}”`)
-          void navigate(`/workflows/${workflow.id}/edit`)
-        },
-        onError: reportError,
+    createWorkflow.mutate(workflowInputFromDialog(values, provider), {
+      onSuccess: (workflow) => {
+        setDialogOpen(false)
+        toast.success(`Created “${workflow.name}”`)
+        void navigate(`/workflows/${workflow.id}/edit`)
       },
-    )
+      onError: reportError,
+    })
   }
 
   function handleDuplicate(id: string) {

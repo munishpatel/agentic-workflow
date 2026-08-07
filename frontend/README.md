@@ -25,22 +25,22 @@ the dev server proxies `/api` to `:8000`.
 
 ## Scripts
 
-| | |
-|---|---|
-| `npm run dev` | Dev server |
-| `npm run build` | Type-check and build for production |
-| `npm run preview` | Serve the production build |
-| `npm test` | Unit tests — 79 tests, no browser needed |
-| `npm run typecheck` | `tsc -b --force` |
-| `npm run lint` / `npm run format` | oxlint / prettier |
-| `npm run gen:api` | Regenerate `src/types/api.generated.ts` from the running backend's OpenAPI schema |
+|                                   |                                                                                   |
+| --------------------------------- | --------------------------------------------------------------------------------- |
+| `npm run dev`                     | Dev server                                                                        |
+| `npm run build`                   | Type-check and build for production                                               |
+| `npm run preview`                 | Serve the production build                                                        |
+| `npm test`                        | Unit tests — 79 tests, no browser needed                                          |
+| `npm run typecheck`               | `tsc -b --force`                                                                  |
+| `npm run lint` / `npm run format` | oxlint / prettier                                                                 |
+| `npm run gen:api`                 | Regenerate `src/types/api.generated.ts` from the running backend's OpenAPI schema |
 
 ## Configuration
 
-| Variable | Default | |
-|---|---|---|
-| `VITE_USE_MOCKS` | `true` | `false` to talk to the real backend |
-| `VITE_API_BASE_URL` | *(empty)* | Leave empty to use the dev proxy |
+| Variable            | Default   |                                     |
+| ------------------- | --------- | ----------------------------------- |
+| `VITE_USE_MOCKS`    | `true`    | `false` to talk to the real backend |
+| `VITE_API_BASE_URL` | _(empty)_ | Leave empty to use the dev proxy    |
 
 `VITE_*` variables are inlined into the bundle at build time and are visible to
 anyone who loads the page — never put a secret in `frontend/.env`. Vite reads
@@ -111,11 +111,11 @@ streaming changes only what feeds it. Sorting is by `seq`, never `ts`.
 
 Three stores, non-overlapping:
 
-| | Owns |
-|---|---|
-| **TanStack Query** | Server state: workflows, node kinds, tools, providers, runs, emails |
-| **Zustand** (`store/editorStore.ts`) | The unsaved builder draft, plus undo/redo |
-| **React `useState`** | Ephemeral UI: dialogs, composer text, active tab |
+|                                      | Owns                                                                |
+| ------------------------------------ | ------------------------------------------------------------------- |
+| **TanStack Query**                   | Server state: workflows, node kinds, tools, providers, runs, emails |
+| **Zustand** (`store/editorStore.ts`) | The unsaved builder draft, plus undo/redo                           |
+| **React `useState`**                 | Ephemeral UI: dialogs, composer text, active tab                    |
 
 Builder mount → Query fetches → `hydrate()` copies in once → edits mutate Zustand
 → Save sends `toInput()` → `markSaved()`. Nothing writes to the Query cache from
@@ -129,7 +129,7 @@ self-connections, duplicate edges and anything that would close a cycle.
 `POST /validate` remains the authority; these rules exist to make an illegal
 connection un-draggable.
 
-One deliberate relaxation: input ports are single-assignment *except* when the
+One deliberate relaxation: input ports are single-assignment _except_ when the
 two sources sit behind different output ports of the same router, which is what
 makes `input → router → {A|B} → output` legal. See `areMutuallyExclusive`.
 
@@ -143,13 +143,13 @@ Run fixtures include a real tool call and result, one `edge.transfer` per
 traversed edge, a `route.decision` and a pruned `node.skipped`. Failure paths are
 reachable by keyword:
 
-| Say this in chat | |
-|---|---|
-| anything | A normal run with a full timeline |
-| `…fail…` | A tool call errors and the agent recovers |
-| `…refuse…` | The run ends in `run.error` with code `refusal` |
-| `boom` | HTTP 500 |
-| `nokey` | HTTP 401 `missing_api_key` |
+| Say this in chat |                                                 |
+| ---------------- | ----------------------------------------------- |
+| anything         | A normal run with a full timeline               |
+| `…fail…`         | A tool call errors and the agent recovers       |
+| `…refuse…`       | The run ends in `run.error` with code `refusal` |
+| `boom`           | HTTP 500                                        |
+| `nokey`          | HTTP 401 `missing_api_key`                      |
 
 The mock layer is only ever imported dynamically, so deleting `src/mocks` breaks
 nothing else.
@@ -174,13 +174,13 @@ nothing else.
 npm test        # 79 tests, no browser needed
 ```
 
-| File | Covers |
-|---|---|
-| `lib/ports.test.ts` | Type compatibility, cycles, occupancy, dynamic router ports |
-| `lib/events.test.ts` | The reducer — streaming deltas, out-of-order input, unknown events |
-| `lib/jsonSchema.test.ts` | Every supported field shape, plus `$ref` and `Optional[T]` |
-| `store/editorStore.test.ts` | Edge cascade on delete, connect rejection, undo/redo |
-| `mocks/handlers.test.ts` | The mock API end to end, including its failure fixtures |
+| File                        | Covers                                                             |
+| --------------------------- | ------------------------------------------------------------------ |
+| `lib/ports.test.ts`         | Type compatibility, cycles, occupancy, dynamic router ports        |
+| `lib/events.test.ts`        | The reducer — streaming deltas, out-of-order input, unknown events |
+| `lib/jsonSchema.test.ts`    | Every supported field shape, plus `$ref` and `Optional[T]`         |
+| `store/editorStore.test.ts` | Edge cascade on delete, connect rejection, undo/redo               |
+| `mocks/handlers.test.ts`    | The mock API end to end, including its failure fixtures            |
 
 End-to-end tests are out of scope at this size; the UI was verified by driving a
 real browser during development.
