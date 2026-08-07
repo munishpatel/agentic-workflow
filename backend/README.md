@@ -62,7 +62,12 @@ Read from the environment or `.env`.
 | `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | |
 | `DATABASE_URL` | `sqlite+aiosqlite:///./workflows.db` | |
 | `CORS_ORIGINS` | `http://localhost:5173` | Comma-separated |
-| `SEARCH_API_KEY` | *(empty)* | Tavily. Without it, `web_search` returns labelled mock results |
+| `SEARCH_API_KEY` | *(empty)* | Tavily. Optional — see below |
+
+`web_search` falls back in three tiers: Tavily when `SEARCH_API_KEY` is set,
+otherwise Anthropic's server-side search using `ANTHROPIC_API_KEY`, otherwise
+clearly-labelled placeholders. Tavily is preferred when available because it is
+provider-neutral and costs one HTTP call rather than an extra LLM round trip.
 
 Switching between `claude-opus-5`, `claude-sonnet-5` and `claude-haiku-4-5`
 requires no code change. `LLM_MODEL` applies to newly created workflows; change
@@ -217,7 +222,8 @@ cannot change the result.
 ## Limitations
 
 - `create_all` on startup rather than Alembic migrations.
-- `web_search` returns labelled mock results when `SEARCH_API_KEY` is unset.
+- `web_search` returns labelled placeholders only when no key of either kind is
+  set.
 - `tool` node arguments are literal only — no per-argument wired ports.
 - Responses are not streamed.
 - `send_email` records to an outbox rather than sending.
