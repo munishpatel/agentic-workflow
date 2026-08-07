@@ -161,9 +161,4 @@ cd frontend && npm run typecheck && npm run lint
 | `Address already in use`          | `lsof -ti:8000 \| xargs kill`                                           |
 | Frontend requests 404             | Backend not running — the Vite proxy expects `:8000`                    |
 | `uv sync` fails on Python version | `uv python install 3.13`                                                |
-| Search results look synthetic     | Expected without `SEARCH_API_KEY`; add a Tavily key for live search     |
-
-## Design docs
-
-`plan.md` (whole-system design) · `frontend-plan.md` · `backend-plan.md` ·
-`frontend-imp.md` (the contract between the two halves).
+| Search results look synthetic     | Only happens with no keys at all; otherwise search uses Tavily or Anthropic |

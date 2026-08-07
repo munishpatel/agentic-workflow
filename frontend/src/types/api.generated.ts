@@ -4,948 +4,962 @@
  */
 
 export interface paths {
-    "/api/workflows": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Workflows
-         * @description Summaries, not full graphs — the list page never needs the nodes.
-         */
-        get: operations["list_workflows_api_workflows_get"];
-        put?: never;
-        /** Create Workflow */
-        post: operations["create_workflow_api_workflows_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/workflows/{workflow_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Workflow */
-        get: operations["get_workflow_api_workflows__workflow_id__get"];
-        /** Update Workflow */
-        put: operations["update_workflow_api_workflows__workflow_id__put"];
-        post?: never;
-        /** Delete Workflow */
-        delete: operations["delete_workflow_api_workflows__workflow_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/workflows/{workflow_id}/validate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Validate Workflow
-         * @description Validates the **submitted draft**, not the stored graph — the builder sends
-         *     whatever is currently on screen. The id only has to exist.
-         */
-        post: operations["validate_workflow_api_workflows__workflow_id__validate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/node-kinds": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Node Kinds
-         * @description Port contracts and config JSON Schemas. The builder is *generated* from
-         *     this — which is what makes adding a node kind here need no frontend change.
-         */
-        get: operations["list_node_kinds_api_node_kinds_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/tools": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Tools */
-        get: operations["list_tools_api_tools_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/providers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Providers */
-        get: operations["list_providers_api_providers_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/workflows/{workflow_id}/run": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Run Workflow
-         * @description Errors *before* the run starts — no credential, unknown workflow, invalid
-         *     graph — are HTTP errors with a code the frontend renders. Once the run has
-         *     started, a failure comes back as **200** with a normal body whose event log
-         *     ends in `run.error`: the partial timeline is what the user needs, and a 500
-         *     would throw it away.
-         */
-        post: operations["run_workflow_api_workflows__workflow_id__run_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/workflows/{workflow_id}/runs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Runs */
-        get: operations["list_runs_api_workflows__workflow_id__runs_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/runs/{run_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Run
-         * @description Top-level, not nested under a workflow, and returns the **same** shape as
-         *     `/run` — that is what lets replay and live share one code path in the UI.
-         */
-        get: operations["get_run_api_runs__run_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/emails": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Emails
-         * @description Global and unscoped, newest first, capped — the mock outbox.
-         */
-        get: operations["list_emails_api_emails_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Health */
-        get: operations["health_api_health_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
+  '/api/workflows': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * List Workflows
+     * @description Summaries, not full graphs — the list page never needs the nodes.
+     */
+    get: operations['list_workflows_api_workflows_get']
+    put?: never
+    /** Create Workflow */
+    post: operations['create_workflow_api_workflows_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/workflows/{workflow_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Get Workflow */
+    get: operations['get_workflow_api_workflows__workflow_id__get']
+    /** Update Workflow */
+    put: operations['update_workflow_api_workflows__workflow_id__put']
+    post?: never
+    /** Delete Workflow */
+    delete: operations['delete_workflow_api_workflows__workflow_id__delete']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/workflows/{workflow_id}/validate': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Validate Workflow
+     * @description Validates the **submitted draft**, not the stored graph — the builder sends
+     *     whatever is currently on screen. The id only has to exist.
+     */
+    post: operations['validate_workflow_api_workflows__workflow_id__validate_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/node-kinds': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * List Node Kinds
+     * @description Port contracts and config JSON Schemas. The builder is *generated* from
+     *     this — which is what makes adding a node kind here need no frontend change.
+     */
+    get: operations['list_node_kinds_api_node_kinds_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/tools': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Tools */
+    get: operations['list_tools_api_tools_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/providers': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Providers */
+    get: operations['list_providers_api_providers_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/workflows/{workflow_id}/run': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Run Workflow
+     * @description Errors *before* the run starts — no credential, unknown workflow, invalid
+     *     graph — are HTTP errors with a code the frontend renders. Once the run has
+     *     started, a failure comes back as **200** with a normal body whose event log
+     *     ends in `run.error`: the partial timeline is what the user needs, and a 500
+     *     would throw it away.
+     */
+    post: operations['run_workflow_api_workflows__workflow_id__run_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/workflows/{workflow_id}/runs': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** List Runs */
+    get: operations['list_runs_api_workflows__workflow_id__runs_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/runs/{run_id}': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * Get Run
+     * @description Top-level, not nested under a workflow, and returns the **same** shape as
+     *     `/run` — that is what lets replay and live share one code path in the UI.
+     */
+    get: operations['get_run_api_runs__run_id__get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/emails': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /**
+     * List Emails
+     * @description Global and unscoped, newest first, capped — the mock outbox.
+     */
+    get: operations['list_emails_api_emails_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/health': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    /** Health */
+    get: operations['health_api_health_get']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
 }
-export type webhooks = Record<string, never>;
+export type webhooks = Record<string, never>
 export interface components {
-    schemas: {
-        /** ChatTurn */
-        ChatTurn: {
-            /**
-             * Role
-             * @enum {string}
-             */
-            role: "user" | "assistant";
-            /** Content */
-            content: string;
-        };
-        /** Edge */
-        Edge: {
-            /** Id */
-            id: string;
-            source: components["schemas"]["EdgeEnd"];
-            target: components["schemas"]["EdgeEnd"];
-        };
-        /** EdgeEnd */
-        EdgeEnd: {
-            /** Node Id */
-            node_id: string;
-            /** Port */
-            port: string;
-        };
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
-        };
-        /**
-         * Node
-         * @description A node in a saved graph.
-         *
-         *     `id` is **client-generated** (`n_…`) and must round-trip verbatim — edges
-         *     reference nodes by it. Same for `position`: losing it scrambles the user's
-         *     canvas layout on reload.
-         */
-        Node: {
-            /** Id */
-            id: string;
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "input" | "agent" | "tool" | "router" | "output";
-            /**
-             * Label
-             * @default
-             */
-            label: string;
-            /** Config */
-            config?: {
-                [key: string]: unknown;
-            };
-            position?: components["schemas"]["Position"];
-        };
-        /** Position */
-        Position: {
-            /**
-             * X
-             * @default 0
-             */
-            x: number;
-            /**
-             * Y
-             * @default 0
-             */
-            y: number;
-        };
-        /** ProviderMeta */
-        ProviderMeta: {
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /** Models */
-            models: string[];
-        };
-        /**
-         * RunEvent
-         * @description One envelope for everything observable in a run.
-         *
-         *     There is deliberately no per-concern event type. That is what makes the
-         *     whole observability story an ordered append-only log, and what makes
-         *     streaming an additive change later: the same envelopes over SSE feed the
-         *     same reducer the frontend already ships.
-         */
-        RunEvent: {
-            /** Id */
-            id: string;
-            /** Run Id */
-            run_id: string;
-            /** Seq */
-            seq: number;
-            /** Ts */
-            ts: number;
-            /**
-             * Author
-             * @default system
-             * @enum {string}
-             */
-            author: "user" | "system" | "node";
-            /** Node Id */
-            node_id?: string | null;
-            /** Branch */
-            branch?: string | null;
-            /**
-             * Type
-             * @enum {string}
-             */
-            type: "run.start" | "run.end" | "run.error" | "node.start" | "node.end" | "node.skipped" | "edge.transfer" | "llm.request" | "llm.response" | "text.delta" | "text.message" | "tool.call" | "tool.result" | "route.decision";
-            /** Payload */
-            payload?: {
-                [key: string]: unknown;
-            };
-            /**
-             * Partial
-             * @default false
-             */
-            partial: boolean;
-            /**
-             * Final
-             * @default true
-             */
-            final: boolean;
-        };
-        /** RunRequest */
-        RunRequest: {
-            /** Message */
-            message: string;
-            /** History */
-            history?: components["schemas"]["ChatTurn"][];
-        };
-        /** RunResponse */
-        RunResponse: {
-            /** Run Id */
-            run_id: string;
-            /** Final Response */
-            final_response: string;
-            /** Events */
-            events: components["schemas"]["RunEvent"][];
-            usage: components["schemas"]["Usage"];
-            /** Duration Ms */
-            duration_ms: number;
-        };
-        /** RunSummary */
-        RunSummary: {
-            /** Run Id */
-            run_id: string;
-            /** User Message */
-            user_message: string;
-            /** Final Response */
-            final_response: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            usage: components["schemas"]["Usage"];
-            /** Duration Ms */
-            duration_ms: number;
-        };
-        /** SentEmailRead */
-        SentEmailRead: {
-            /** Id */
-            id: string;
-            /** To */
-            to: string;
-            /** Subject */
-            subject: string;
-            /** Body */
-            body: string;
-            /** Run Id */
-            run_id: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-        };
-        /** ToolMeta */
-        ToolMeta: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Description */
-            description: string;
-            /** Input Schema */
-            input_schema: {
-                [key: string]: unknown;
-            };
-        };
-        /** Usage */
-        Usage: {
-            /**
-             * Input Tokens
-             * @default 0
-             */
-            input_tokens: number;
-            /**
-             * Output Tokens
-             * @default 0
-             */
-            output_tokens: number;
-        };
-        /** ValidationError */
-        ValidationError: {
-            /** Location */
-            loc: (string | number)[];
-            /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
-        };
-        /**
-         * ValidationIssue
-         * @description `code` is shown verbatim in the builder's validation banner, and an issue
-         *     carrying a `node_id` becomes a clickable row that selects and rings that
-         *     node — so set it whenever there is one.
-         */
-        ValidationIssue: {
-            /** Code */
-            code: string;
-            /** Message */
-            message: string;
-            /** Node Id */
-            node_id?: string | null;
-            /** Edge Id */
-            edge_id?: string | null;
-        };
-        /**
-         * ValidationResult
-         * @description Response-only, so `errors` and `warnings` carry no defaults: the server
-         *     always sends both, and a default would publish them as optional in the
-         *     OpenAPI, forcing every frontend call site to null-check a field that is
-         *     never absent.
-         */
-        ValidationResult: {
-            /** Valid */
-            valid: boolean;
-            /** Errors */
-            errors: components["schemas"]["ValidationIssue"][];
-            /** Warnings */
-            warnings: components["schemas"]["ValidationIssue"][];
-        };
-        /**
-         * WorkflowInput
-         * @description POST/PUT body. The server owns `id`, `created_at` and `updated_at`.
-         */
-        WorkflowInput: {
-            /** Name */
-            name: string;
-            /** Description */
-            description?: string | null;
-            /**
-             * Provider
-             * @default anthropic
-             */
-            provider: string;
-            /**
-             * Model
-             * @default claude-opus-5
-             */
-            model: string;
-            /**
-             * System Prompt
-             * @default
-             */
-            system_prompt: string;
-            /** Nodes */
-            nodes?: components["schemas"]["Node"][];
-            /** Edges */
-            edges?: components["schemas"]["Edge"][];
-        };
-        /** WorkflowRead */
-        WorkflowRead: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Description */
-            description: string | null;
-            /** Provider */
-            provider: string;
-            /** Model */
-            model: string;
-            /** System Prompt */
-            system_prompt: string;
-            /** Nodes */
-            nodes: components["schemas"]["Node"][];
-            /** Edges */
-            edges: components["schemas"]["Edge"][];
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
-        /**
-         * WorkflowSummary
-         * @description What `GET /api/workflows` returns — the list page renders these as badges
-         *     and never fetches a full graph.
-         */
-        WorkflowSummary: {
-            /** Id */
-            id: string;
-            /** Name */
-            name: string;
-            /** Description */
-            description: string | null;
-            /** Model */
-            model: string;
-            /** Node Count */
-            node_count: number;
-            /** Tool Ids */
-            tool_ids: string[];
-            /**
-             * Updated At
-             * Format: date-time
-             */
-            updated_at: string;
-        };
-    };
-    responses: never;
-    parameters: never;
-    requestBodies: never;
-    headers: never;
-    pathItems: never;
+  schemas: {
+    /** ChatTurn */
+    ChatTurn: {
+      /**
+       * Role
+       * @enum {string}
+       */
+      role: 'user' | 'assistant'
+      /** Content */
+      content: string
+    }
+    /** Edge */
+    Edge: {
+      /** Id */
+      id: string
+      source: components['schemas']['EdgeEnd']
+      target: components['schemas']['EdgeEnd']
+    }
+    /** EdgeEnd */
+    EdgeEnd: {
+      /** Node Id */
+      node_id: string
+      /** Port */
+      port: string
+    }
+    /** HTTPValidationError */
+    HTTPValidationError: {
+      /** Detail */
+      detail?: components['schemas']['ValidationError'][]
+    }
+    /**
+     * Node
+     * @description A node in a saved graph.
+     *
+     *     `id` is **client-generated** (`n_…`) and must round-trip verbatim — edges
+     *     reference nodes by it. Same for `position`: losing it scrambles the user's
+     *     canvas layout on reload.
+     */
+    Node: {
+      /** Id */
+      id: string
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: 'input' | 'agent' | 'tool' | 'router' | 'output'
+      /**
+       * Label
+       * @default
+       */
+      label: string
+      /** Config */
+      config?: {
+        [key: string]: unknown
+      }
+      position?: components['schemas']['Position']
+    }
+    /** Position */
+    Position: {
+      /**
+       * X
+       * @default 0
+       */
+      x: number
+      /**
+       * Y
+       * @default 0
+       */
+      y: number
+    }
+    /** ProviderMeta */
+    ProviderMeta: {
+      /** Id */
+      id: string
+      /** Label */
+      label: string
+      /** Models */
+      models: string[]
+    }
+    /**
+     * RunEvent
+     * @description One envelope for everything observable in a run.
+     *
+     *     There is deliberately no per-concern event type. That is what makes the
+     *     whole observability story an ordered append-only log, and what makes
+     *     streaming an additive change later: the same envelopes over SSE feed the
+     *     same reducer the frontend already ships.
+     */
+    RunEvent: {
+      /** Id */
+      id: string
+      /** Run Id */
+      run_id: string
+      /** Seq */
+      seq: number
+      /** Ts */
+      ts: number
+      /**
+       * Author
+       * @default system
+       * @enum {string}
+       */
+      author: 'user' | 'system' | 'node'
+      /** Node Id */
+      node_id?: string | null
+      /** Branch */
+      branch?: string | null
+      /**
+       * Type
+       * @enum {string}
+       */
+      type:
+        | 'run.start'
+        | 'run.end'
+        | 'run.error'
+        | 'node.start'
+        | 'node.end'
+        | 'node.skipped'
+        | 'edge.transfer'
+        | 'llm.request'
+        | 'llm.response'
+        | 'text.delta'
+        | 'text.message'
+        | 'tool.call'
+        | 'tool.result'
+        | 'route.decision'
+      /** Payload */
+      payload?: {
+        [key: string]: unknown
+      }
+      /**
+       * Partial
+       * @default false
+       */
+      partial: boolean
+      /**
+       * Final
+       * @default true
+       */
+      final: boolean
+    }
+    /** RunRequest */
+    RunRequest: {
+      /** Message */
+      message: string
+      /** History */
+      history?: components['schemas']['ChatTurn'][]
+    }
+    /** RunResponse */
+    RunResponse: {
+      /** Run Id */
+      run_id: string
+      /** Final Response */
+      final_response: string
+      /** Events */
+      events: components['schemas']['RunEvent'][]
+      usage: components['schemas']['Usage']
+      /** Duration Ms */
+      duration_ms: number
+    }
+    /** RunSummary */
+    RunSummary: {
+      /** Run Id */
+      run_id: string
+      /** User Message */
+      user_message: string
+      /** Final Response */
+      final_response: string
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      usage: components['schemas']['Usage']
+      /** Duration Ms */
+      duration_ms: number
+    }
+    /** SentEmailRead */
+    SentEmailRead: {
+      /** Id */
+      id: string
+      /** To */
+      to: string
+      /** Subject */
+      subject: string
+      /** Body */
+      body: string
+      /** Run Id */
+      run_id: string | null
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+    }
+    /** ToolMeta */
+    ToolMeta: {
+      /** Id */
+      id: string
+      /** Name */
+      name: string
+      /** Description */
+      description: string
+      /** Input Schema */
+      input_schema: {
+        [key: string]: unknown
+      }
+    }
+    /** Usage */
+    Usage: {
+      /**
+       * Input Tokens
+       * @default 0
+       */
+      input_tokens: number
+      /**
+       * Output Tokens
+       * @default 0
+       */
+      output_tokens: number
+    }
+    /** ValidationError */
+    ValidationError: {
+      /** Location */
+      loc: (string | number)[]
+      /** Message */
+      msg: string
+      /** Error Type */
+      type: string
+      /** Input */
+      input?: unknown
+      /** Context */
+      ctx?: Record<string, never>
+    }
+    /**
+     * ValidationIssue
+     * @description `code` is shown verbatim in the builder's validation banner, and an issue
+     *     carrying a `node_id` becomes a clickable row that selects and rings that
+     *     node — so set it whenever there is one.
+     */
+    ValidationIssue: {
+      /** Code */
+      code: string
+      /** Message */
+      message: string
+      /** Node Id */
+      node_id?: string | null
+      /** Edge Id */
+      edge_id?: string | null
+    }
+    /**
+     * ValidationResult
+     * @description Response-only, so `errors` and `warnings` carry no defaults: the server
+     *     always sends both, and a default would publish them as optional in the
+     *     OpenAPI, forcing every frontend call site to null-check a field that is
+     *     never absent.
+     */
+    ValidationResult: {
+      /** Valid */
+      valid: boolean
+      /** Errors */
+      errors: components['schemas']['ValidationIssue'][]
+      /** Warnings */
+      warnings: components['schemas']['ValidationIssue'][]
+    }
+    /**
+     * WorkflowInput
+     * @description POST/PUT body. The server owns `id`, `created_at` and `updated_at`.
+     */
+    WorkflowInput: {
+      /** Name */
+      name: string
+      /** Description */
+      description?: string | null
+      /**
+       * Provider
+       * @default anthropic
+       */
+      provider: string
+      /**
+       * Model
+       * @default claude-opus-5
+       */
+      model: string
+      /**
+       * System Prompt
+       * @default
+       */
+      system_prompt: string
+      /** Nodes */
+      nodes?: components['schemas']['Node'][]
+      /** Edges */
+      edges?: components['schemas']['Edge'][]
+    }
+    /** WorkflowRead */
+    WorkflowRead: {
+      /** Id */
+      id: string
+      /** Name */
+      name: string
+      /** Description */
+      description: string | null
+      /** Provider */
+      provider: string
+      /** Model */
+      model: string
+      /** System Prompt */
+      system_prompt: string
+      /** Nodes */
+      nodes: components['schemas']['Node'][]
+      /** Edges */
+      edges: components['schemas']['Edge'][]
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string
+    }
+    /**
+     * WorkflowSummary
+     * @description What `GET /api/workflows` returns — the list page renders these as badges
+     *     and never fetches a full graph.
+     */
+    WorkflowSummary: {
+      /** Id */
+      id: string
+      /** Name */
+      name: string
+      /** Description */
+      description: string | null
+      /** Model */
+      model: string
+      /** Node Count */
+      node_count: number
+      /** Tool Ids */
+      tool_ids: string[]
+      /**
+       * Updated At
+       * Format: date-time
+       */
+      updated_at: string
+    }
+  }
+  responses: never
+  parameters: never
+  requestBodies: never
+  headers: never
+  pathItems: never
 }
-export type $defs = Record<string, never>;
+export type $defs = Record<string, never>
 export interface operations {
-    list_workflows_api_workflows_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowSummary"][];
-                };
-            };
-        };
-    };
-    create_workflow_api_workflows_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowInput"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_workflow_api_workflows__workflow_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workflow_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_workflow_api_workflows__workflow_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workflow_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowInput"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WorkflowRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_workflow_api_workflows__workflow_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workflow_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    validate_workflow_api_workflows__workflow_id__validate_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workflow_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WorkflowInput"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ValidationResult"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_node_kinds_api_node_kinds_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
-                };
-            };
-        };
-    };
-    list_tools_api_tools_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolMeta"][];
-                };
-            };
-        };
-    };
-    list_providers_api_providers_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderMeta"][];
-                };
-            };
-        };
-    };
-    run_workflow_api_workflows__workflow_id__run_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workflow_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RunRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_runs_api_workflows__workflow_id__runs_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                workflow_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunSummary"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_run_api_runs__run_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                run_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RunResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_emails_api_emails_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SentEmailRead"][];
-                };
-            };
-        };
-    };
-    health_api_health_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
+  list_workflows_api_workflows_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkflowSummary'][]
+        }
+      }
+    }
+  }
+  create_workflow_api_workflows_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WorkflowInput']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkflowRead']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_workflow_api_workflows__workflow_id__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        workflow_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkflowRead']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  update_workflow_api_workflows__workflow_id__put: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        workflow_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WorkflowInput']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['WorkflowRead']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  delete_workflow_api_workflows__workflow_id__delete: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        workflow_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  validate_workflow_api_workflows__workflow_id__validate_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        workflow_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['WorkflowInput']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ValidationResult']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_node_kinds_api_node_kinds_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            [key: string]: unknown
+          }[]
+        }
+      }
+    }
+  }
+  list_tools_api_tools_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ToolMeta'][]
+        }
+      }
+    }
+  }
+  list_providers_api_providers_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ProviderMeta'][]
+        }
+      }
+    }
+  }
+  run_workflow_api_workflows__workflow_id__run_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        workflow_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['RunRequest']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RunResponse']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_runs_api_workflows__workflow_id__runs_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        workflow_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RunSummary'][]
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  get_run_api_runs__run_id__get: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        run_id: string
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RunResponse']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  list_emails_api_emails_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['SentEmailRead'][]
+        }
+      }
+    }
+  }
+  health_api_health_get: {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': {
+            [key: string]: unknown
+          }
+        }
+      }
+    }
+  }
 }

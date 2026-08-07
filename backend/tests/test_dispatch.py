@@ -5,14 +5,29 @@ the agent loop — the model gets the error and a chance to recover.
 """
 
 import asyncio
+import json
+from types import SimpleNamespace
 from typing import ClassVar
 
+import httpx
 import pytest
+import respx
 from pydantic import BaseModel
 
 from app.tools import registry
 from app.tools.base import ToolContext, ToolResult
 from app.tools.dispatch import dispatch
+
+
+def _settings(**overrides: object) -> SimpleNamespace:
+    """A stand-in for `Settings` — the tools only read attributes off it."""
+    defaults: dict[str, object] = {
+        "search_api_key": "",
+        "anthropic_api_key": "",
+        "anthropic_base_url": "https://api.anthropic.com",
+        "llm_model": "claude-sonnet-5",
+    }
+    return SimpleNamespace(**{**defaults, **overrides})
 
 
 class EchoInput(BaseModel):
@@ -146,13 +161,111 @@ class TestRegistryContract:
         assert [schema["name"] for schema in schemas] == ["calculator"]
 
 
-class TestMockedTools:
-    async def test_web_search_labels_its_mock_results(self) -> None:
-        """A reviewer with no third-party key must never see fabricated results unlabelled."""
+class TestWebSearchFallback:
+    """
+    Three tiers, in order: Tavily → Anthropic's server-side search → labelled
+    placeholders. Each tier exists so the app still runs with one fewer key.
+    """
+
+    async def test_falls_back_to_mock_when_no_key_is_set_at_all(self) -> None:
+        """A reviewer with no keys must never see fabricated results unlabelled."""
         outcome = await dispatch("web_search", {"query": "anything"}, ToolContext())
         assert outcome.result.is_error is False
         assert "MOCK RESULTS" in outcome.result.output
 
+    @respx.mock
+    async def test_uses_anthropic_server_search_when_only_the_llm_key_is_set(self) -> None:
+        route = respx.post("https://api.anthropic.com/v1/messages").mock(
+            return_value=httpx.Response(
+                200,
+                json={
+                    "stop_reason": "end_turn",
+                    "content": [
+                        {"type": "server_tool_use", "id": "s1", "name": "web_search"},
+                        {"type": "web_search_tool_result", "tool_use_id": "s1", "content": []},
+                        {"type": "text", "text": "1. Result\n   https://example.org\n   Snippet."},
+                    ],
+                },
+            )
+        )
+        ctx = ToolContext(settings=_settings(anthropic_api_key="sk-ant-test"))
+
+        outcome = await dispatch("web_search", {"query": "python 3.14"}, ctx)
+
+        assert outcome.result.is_error is False
+        assert "MOCK RESULTS" not in outcome.result.output
+        assert "https://example.org" in outcome.result.output
+
+        body = json.loads(route.calls[0].request.content)
+        assert body["tools"] == [{"type": "web_search_20260209", "name": "web_search"}]
+        # The banned sampling parameters must not creep in on this path either.
+        assert not {"temperature", "top_p", "top_k"} & body.keys()
+
+    @respx.mock
+    async def test_search_is_pinned_to_sonnet_whatever_the_workflow_runs_on(self) -> None:
+        """
+        The search call is a lookup, not the agent thinking, so it must not
+        follow LLM_MODEL. `claude-haiku-4-5` would 400 on the tool version this
+        sends, and the per-search cost should not change with the workflow.
+        """
+        route = respx.post("https://api.anthropic.com/v1/messages").mock(
+            return_value=httpx.Response(
+                200, json={"stop_reason": "end_turn", "content": [{"type": "text", "text": "ok"}]}
+            )
+        )
+        ctx = ToolContext(
+            settings=_settings(anthropic_api_key="sk-ant-test", llm_model="claude-haiku-4-5")
+        )
+
+        await dispatch("web_search", {"query": "anything"}, ctx)
+
+        body = json.loads(route.calls[0].request.content)
+        assert body["model"] == "claude-sonnet-5"
+        assert body["tools"][0]["type"] == "web_search_20260209"
+
+    @respx.mock
+    async def test_a_provider_failure_becomes_an_error_result_not_a_raise(self) -> None:
+        respx.post("https://api.anthropic.com/v1/messages").mock(
+            return_value=httpx.Response(500, json={})
+        )
+        ctx = ToolContext(settings=_settings(anthropic_api_key="sk-ant-test"))
+
+        outcome = await dispatch("web_search", {"query": "anything"}, ctx)
+
+        assert outcome.result.is_error is True
+
+    @respx.mock
+    async def test_a_refusal_is_an_error_rather_than_an_empty_result(self) -> None:
+        respx.post("https://api.anthropic.com/v1/messages").mock(
+            return_value=httpx.Response(200, json={"stop_reason": "refusal", "content": []})
+        )
+        ctx = ToolContext(settings=_settings(anthropic_api_key="sk-ant-test"))
+
+        outcome = await dispatch("web_search", {"query": "anything"}, ctx)
+
+        assert outcome.result.is_error is True
+
+    @respx.mock
+    async def test_tavily_wins_when_both_keys_are_set(self) -> None:
+        anthropic = respx.post("https://api.anthropic.com/v1/messages").mock(
+            return_value=httpx.Response(200, json={"content": []})
+        )
+        tavily = respx.post("https://api.tavily.com/search").mock(
+            return_value=httpx.Response(
+                200,
+                json={"results": [{"title": "T", "url": "https://t.example", "content": "c"}]},
+            )
+        )
+        ctx = ToolContext(settings=_settings(search_api_key="tvly-x", anthropic_api_key="sk-ant"))
+
+        outcome = await dispatch("web_search", {"query": "anything"}, ctx)
+
+        assert tavily.called
+        assert not anthropic.called
+        assert "https://t.example" in outcome.result.output
+
+
+class TestMockedTools:
     async def test_send_email_validates_the_address(self) -> None:
         outcome = await dispatch(
             "send_email", {"to": "not-an-email", "subject": "s", "body": "b"}, ToolContext()

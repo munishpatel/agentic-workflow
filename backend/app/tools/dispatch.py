@@ -13,6 +13,19 @@ logger = logging.getLogger("app.tools.dispatch")
 TOOL_TIMEOUT_SECONDS = 20
 
 
+def _timeout_for(tool: Any) -> int:
+    """
+    A tool may declare `timeout_seconds` to widen the default.
+
+    Only one needs it: `web_search` falling back to Anthropic's server-side
+    search runs several queries inside one call, so it legitimately outlives a
+    budget sized for a single HTTP request. Keeping the default tight and making
+    the exception opt-in is safer than raising the cap for every tool.
+    """
+    declared = getattr(tool, "timeout_seconds", None)
+    return declared if isinstance(declared, int) and declared > 0 else TOOL_TIMEOUT_SECONDS
+
+
 class DispatchOutcome:
     """A `ToolResult` plus how long it took, which the timeline shows."""
 
@@ -47,15 +60,13 @@ async def dispatch(tool_id: str, raw_args: dict[str, Any], ctx: ToolContext) -> 
         # offending field, which is exactly what it needs to retry correctly.
         return finish(ToolResult(output=f"Invalid arguments for {tool_id}: {exc}", is_error=True))
 
+    budget = _timeout_for(tool)
     try:
-        async with asyncio.timeout(TOOL_TIMEOUT_SECONDS):
+        async with asyncio.timeout(budget):
             result = await tool.execute(args, ctx)
     except TimeoutError:
         return finish(
-            ToolResult(
-                output=f"{tool_id} timed out after {TOOL_TIMEOUT_SECONDS} seconds.",
-                is_error=True,
-            )
+            ToolResult(output=f"{tool_id} timed out after {budget} seconds.", is_error=True)
         )
     except asyncio.CancelledError:
         # A cancelled run is not a tool failure — let it propagate.

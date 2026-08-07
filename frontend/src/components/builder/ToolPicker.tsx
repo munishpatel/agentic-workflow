@@ -11,6 +11,14 @@ interface ToolPickerProps {
   /** Ids the schema allows, from its enum. */
   allowed: string[]
   idPrefix: string
+  /**
+   * Drop the descriptions and tighten the rows.
+   *
+   * The inspector has room to explain *when* a tool is worth enabling; the
+   * create dialog does not, and four paragraphs there bury the fields above
+   * them. The names alone are enough to recognise a tool you already want.
+   */
+  compact?: boolean
 }
 
 /**
@@ -21,7 +29,7 @@ interface ToolPickerProps {
  * It is chosen by property shape (`tools` + array-of-enum-string), not by node
  * kind, so a future kind with a `tools` field gets this for free.
  */
-export function ToolPicker({ value, onChange, allowed, idPrefix }: ToolPickerProps) {
+export function ToolPicker({ value, onChange, allowed, idPrefix, compact }: ToolPickerProps) {
   const tools = useTools()
 
   function toggle(id: string, enabled: boolean) {
@@ -59,7 +67,8 @@ export function ToolPicker({ value, onChange, allowed, idPrefix }: ToolPickerPro
             key={tool.id}
             htmlFor={inputId}
             className={cn(
-              'flex cursor-pointer gap-2.5 rounded-lg border p-2.5 transition-colors',
+              'flex cursor-pointer gap-2.5 rounded-lg border transition-colors',
+              compact ? 'items-center p-2' : 'p-2.5',
               checked ? 'border-kind-tool/40 bg-kind-tool/5' : 'hover:bg-muted/60',
             )}
           >
@@ -67,7 +76,7 @@ export function ToolPicker({ value, onChange, allowed, idPrefix }: ToolPickerPro
               id={inputId}
               checked={checked}
               onCheckedChange={(next) => toggle(tool.id, next === true)}
-              className="mt-0.5"
+              className={compact ? undefined : 'mt-0.5'}
             />
             <span className="min-w-0">
               <span className="flex items-center gap-1.5 text-sm font-medium">
@@ -77,7 +86,7 @@ export function ToolPicker({ value, onChange, allowed, idPrefix }: ToolPickerPro
                   {tool.id}
                 </code>
               </span>
-              {tool.description && (
+              {!compact && tool.description && (
                 <span className="mt-0.5 block text-xs text-muted-foreground">
                   {tool.description}
                 </span>
