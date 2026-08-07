@@ -1,0 +1,44 @@
+[project]
+name = "workflow-studio-backend"
+version = "0.1.0"
+description = "Configurable AI workflow builder — FastAPI service"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "aiosqlite>=0.22.1",
+    "email-validator>=2.3.0",
+    "fastapi>=0.141.1",
+    "greenlet>=3.5.4",
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.14.2",
+    "sqlmodel>=0.0.39",
+    "uvicorn[standard]>=0.52.1",
+]
+
+# The app is run with uvicorn, not installed as a library, so uv should manage
+# the environment without trying to build a distribution from it.
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "B008", # FastAPI's Depends() in defaults is the documented pattern
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = ["error::DeprecationWarning:app.*"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+    "respx>=0.23.1",
+    "ruff>=0.16.1",
+]
