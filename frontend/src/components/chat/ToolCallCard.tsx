@@ -1,7 +1,34 @@
 import { useState } from 'react'
-import { AlertCircle, ChevronRight, Loader2, Wrench } from 'lucide-react'
+import {
+  AlertCircle,
+  ChevronRight,
+  Loader2,
+  ShieldAlert,
+  ShieldCheck,
+  ShieldX,
+  Wrench,
+} from 'lucide-react'
 import type { ToolEntry } from '@/types/ui'
 import { cn, formatJson, formatMs } from '@/lib/utils'
+
+/**
+ * A gated call's badge. The wording is about the call, not the reviewer:
+ * "held" says the run stopped, "not run" says the tool never executed — which
+ * is the fact a reader of an old timeline actually needs.
+ */
+const APPROVAL_BADGE = {
+  awaiting: {
+    label: 'held for approval',
+    icon: ShieldAlert,
+    className: 'text-amber-600 dark:text-amber-500',
+  },
+  approved: {
+    label: 'approved',
+    icon: ShieldCheck,
+    className: 'text-emerald-600 dark:text-emerald-500',
+  },
+  rejected: { label: 'rejected — not run', icon: ShieldX, className: 'text-destructive' },
+} as const
 
 const OUTPUT_LIMIT = 600
 
@@ -25,15 +52,21 @@ export function ToolCallCard({ entry, toolNames }: ToolCallCardProps) {
   const truncated = !expanded && result.length > OUTPUT_LIMIT
   const shown = truncated ? `${result.slice(0, OUTPUT_LIMIT)}…` : result
 
+  const badge = entry.approval ? APPROVAL_BADGE[entry.approval] : null
+  const BadgeIcon = badge?.icon
+
   return (
     <div
       className={cn(
         'rounded-lg border bg-card',
         entry.isError && 'border-destructive/40 bg-destructive/5',
+        entry.approval === 'awaiting' && 'border-amber-500/40 bg-amber-500/5',
       )}
     >
       <div className="flex items-center gap-2 px-2.5 py-1.5">
-        {entry.pending ? (
+        {BadgeIcon ? (
+          <BadgeIcon className={cn('size-3.5 shrink-0', badge.className)} aria-hidden />
+        ) : entry.pending ? (
           <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" aria-hidden />
         ) : entry.isError ? (
           <AlertCircle className="size-3.5 shrink-0 text-destructive" aria-hidden />
@@ -41,7 +74,10 @@ export function ToolCallCard({ entry, toolNames }: ToolCallCardProps) {
           <Wrench className="size-3.5 shrink-0 text-kind-tool" aria-hidden />
         )}
         <span className="text-sm font-medium">{name}</span>
-        {entry.isError && <span className="text-xs text-destructive">failed</span>}
+        {badge && <span className={cn('text-xs', badge.className)}>{badge.label}</span>}
+        {/* A rejection is already labelled; saying "failed" too would read as a
+            malfunction rather than a decision. */}
+        {entry.isError && !badge && <span className="text-xs text-destructive">failed</span>}
         <button
           type="button"
           onClick={() => setShowInput((open) => !open)}
@@ -59,10 +95,18 @@ export function ToolCallCard({ entry, toolNames }: ToolCallCardProps) {
         )}
       </div>
 
-      {showInput && (
+      {/* A held call shows its arguments unfolded: the reviewer is being asked
+          about them, and hiding them behind a triangle invites a rubber stamp. */}
+      {(showInput || entry.approval === 'awaiting') && (
         <pre className="mx-2.5 mb-2 overflow-x-auto rounded-md bg-muted px-2 py-1.5 font-mono text-xs">
           {formatJson(entry.input)}
         </pre>
+      )}
+
+      {entry.approvalNote && (
+        <p className="mx-2.5 mb-2 text-xs text-muted-foreground">
+          Reviewer note: <span className="text-foreground">{entry.approvalNote}</span>
+        </p>
       )}
 
       {!entry.pending && result && (

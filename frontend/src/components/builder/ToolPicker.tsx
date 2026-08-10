@@ -1,4 +1,4 @@
-import { Wrench } from 'lucide-react'
+import { ShieldAlert, Wrench } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTools } from '@/lib/queries'
@@ -50,7 +50,13 @@ export function ToolPicker({ value, onChange, allowed, idPrefix, compact }: Tool
   // can still turn tools on, just without the descriptions.
   const rows = allowed.map((id) => {
     const meta = tools.data?.find((tool) => tool.id === id)
-    return { id, name: meta?.name ?? id, description: meta?.description ?? '' }
+    return {
+      id,
+      name: meta?.name ?? id,
+      description: meta?.description ?? '',
+      // Worth knowing *before* enabling it, not the first time a run stops.
+      requiresApproval: meta?.requires_approval ?? false,
+    }
   })
 
   if (rows.length === 0) {
@@ -85,6 +91,15 @@ export function ToolPicker({ value, onChange, allowed, idPrefix, compact }: Tool
                 <code className="font-mono text-xs font-normal text-muted-foreground">
                   {tool.id}
                 </code>
+                {tool.requiresApproval && (
+                  <span
+                    className="flex items-center gap-1 text-xs font-normal text-amber-600 dark:text-amber-500"
+                    title="Runs pause here until a human approves the call"
+                  >
+                    <ShieldAlert className="size-3" aria-hidden />
+                    needs approval
+                  </span>
+                )}
               </span>
               {!compact && tool.description && (
                 <span className="mt-0.5 block text-xs text-muted-foreground">

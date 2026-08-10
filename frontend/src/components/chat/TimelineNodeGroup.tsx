@@ -1,4 +1,4 @@
-import { CircleSlash, Loader2, SkipForward } from 'lucide-react'
+import { CircleSlash, Loader2, ShieldAlert, SkipForward } from 'lucide-react'
 import type { LlmEntry, NodeStep } from '@/types/ui'
 import { RouteDecisionCard } from '@/components/chat/RouteDecisionCard'
 import { ToolCallCard } from '@/components/chat/ToolCallCard'
@@ -25,7 +25,8 @@ export function TimelineNodeGroup({
   const visual = nodeKindVisual(step.nodeKind)
   const skipped = step.status === 'skipped'
   const failed = step.status === 'failed'
-  const Icon = skipped ? SkipForward : failed ? CircleSlash : visual.icon
+  const awaiting = step.status === 'awaiting'
+  const Icon = skipped ? SkipForward : failed ? CircleSlash : awaiting ? ShieldAlert : visual.icon
 
   return (
     <div className={cn('flex gap-2.5', skipped && 'opacity-60')}>
@@ -34,7 +35,8 @@ export function TimelineNodeGroup({
           'mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md',
           skipped && 'bg-muted text-muted-foreground',
           failed && 'bg-destructive/10 text-destructive',
-          !skipped && !failed && cn(visual.bg, visual.text),
+          awaiting && 'bg-amber-500/10 text-amber-600 dark:text-amber-500',
+          !skipped && !failed && !awaiting && cn(visual.bg, visual.text),
         )}
       >
         <Icon className="size-3.5" aria-hidden />
@@ -51,6 +53,9 @@ export function TimelineNodeGroup({
             </span>
           )}
           {failed && <span className="text-xs text-destructive">stopped here</span>}
+          {awaiting && (
+            <span className="text-xs text-amber-600 dark:text-amber-500">waiting for approval</span>
+          )}
           {step.ms !== undefined && (
             <span className="text-xs tabular-nums text-muted-foreground">{formatMs(step.ms)}</span>
           )}

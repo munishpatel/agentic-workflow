@@ -1,9 +1,12 @@
 import logging
 import time
+from collections.abc import Awaitable, Callable
+from functools import partial
 from uuid import uuid4
 
+from app.engine.checkpoint import ApprovalDecision, PendingCall, RunCheckpoint
 from app.engine.events import EventBus
-from app.engine.scheduler import run_graph
+from app.engine.scheduler import RunOutcome, run_graph
 from app.errors import AppError, RunError
 from app.graph.types import Edge, Node
 from app.llm.base import LLMProvider, Usage
@@ -14,7 +17,15 @@ logger = logging.getLogger("app.engine.runner")
 
 
 class RunResult:
-    __slots__ = ("duration_ms", "events", "final_response", "run_id", "status", "usage")
+    __slots__ = (
+        "checkpoint",
+        "duration_ms",
+        "events",
+        "final_response",
+        "run_id",
+        "status",
+        "usage",
+    )
 
     def __init__(
         self,
@@ -24,6 +35,7 @@ class RunResult:
         usage: Usage,
         duration_ms: int,
         status: str,
+        checkpoint: RunCheckpoint | None = None,
     ) -> None:
         self.run_id = run_id
         self.final_response = final_response
@@ -31,6 +43,12 @@ class RunResult:
         self.usage = usage
         self.duration_ms = duration_ms
         self.status = status
+        self.checkpoint = checkpoint
+
+    @property
+    def pending_approvals(self) -> list[PendingCall]:
+        """The gated calls a human still has to rule on. Empty unless paused."""
+        return self.checkpoint.pending_calls if self.checkpoint is not None else []
 
 
 async def execute_run(
@@ -42,6 +60,7 @@ async def execute_run(
     system_prompt: str,
     model: str,
     provider: LLMProvider,
+    provider_id: str = "",
     message: str,
     history: list[dict[str, str]],
     tool_ctx: ToolContext,
@@ -60,10 +79,13 @@ async def execute_run(
     run_id = f"run_{uuid4().hex}"
     bus = EventBus(run_id)
     tool_ctx.run_id = run_id
-    started = time.perf_counter()
 
-    try:
-        outcome = await run_graph(
+    return await _drive(
+        bus=bus,
+        run_id=run_id,
+        started=time.perf_counter(),
+        graph=partial(
+            run_graph,
             nodes=nodes,
             edges=edges,
             workflow_name=workflow_name,
@@ -71,11 +93,72 @@ async def execute_run(
             system_prompt=system_prompt,
             model=model,
             provider=provider,
+            provider_id=provider_id,
             message=message,
             history=history,
             bus=bus,
             tool_ctx=tool_ctx,
-        )
+        ),
+    )
+
+
+async def resume_run(
+    *,
+    run_id: str,
+    checkpoint: RunCheckpoint,
+    decisions: dict[str, ApprovalDecision],
+    provider: LLMProvider,
+    prior_events: list[dict],
+    tool_ctx: ToolContext,
+) -> RunResult:
+    """
+    Finish a run that stopped for a human verdict.
+
+    The same run id, the same timeline continued, the same response shape — a
+    resumed run is not a second run, and the API must not make callers stitch
+    two of them together. Everything the graph needs comes off the checkpoint
+    rather than off the workflow row, so editing the workflow while the approval
+    waited cannot change what the verdict actually authorises.
+    """
+    bus = EventBus.restore(run_id, prior_events)
+    tool_ctx.run_id = run_id
+
+    return await _drive(
+        bus=bus,
+        run_id=run_id,
+        # Rebased so the elapsed time already banked before the pause carries
+        # through every duration computed below, failures included.
+        started=time.perf_counter() - checkpoint.elapsed_ms / 1000,
+        graph=partial(
+            run_graph,
+            nodes=checkpoint.nodes,
+            edges=checkpoint.edges,
+            workflow_name=checkpoint.workflow_name,
+            workflow_id=checkpoint.workflow_id,
+            system_prompt=checkpoint.system_prompt,
+            model=checkpoint.model,
+            provider=provider,
+            provider_id=checkpoint.provider_id,
+            message=checkpoint.message,
+            history=checkpoint.history,
+            bus=bus,
+            tool_ctx=tool_ctx,
+            resume=checkpoint,
+            decisions=decisions,
+        ),
+    )
+
+
+async def _drive(
+    *,
+    bus: EventBus,
+    run_id: str,
+    started: float,
+    graph: Callable[[], Awaitable[RunOutcome]],
+) -> RunResult:
+    """The failure-shaping and result-packing shared by starting and resuming."""
+    try:
+        outcome = await graph()
     except RunError as exc:
         return _failed(bus, run_id, exc.code, exc.message, started, getattr(exc, "details", None))
     except AppError:
@@ -95,6 +178,24 @@ async def execute_run(
     except Exception as exc:
         logger.exception("Run %s crashed", run_id)
         return _failed(bus, run_id, "internal_error", f"The run failed: {exc}", started)
+
+    if outcome.status == "paused":
+        # No `run.end`: the run has not ended. The log simply stops after the
+        # `approval.required` events, which is exactly what a reader should see
+        # — the run is waiting, not finished and not broken.
+        return RunResult(
+            run_id=run_id,
+            final_response="",
+            events=bus.dump(),
+            # Derived from the log rather than the scheduler's running total:
+            # the tokens the paused node spent before it stopped are real and
+            # already billed, and its turn total has not been folded into the
+            # graph's usage yet.
+            usage=usage_from_events(bus),
+            duration_ms=outcome.duration_ms,
+            status="paused",
+            checkpoint=outcome.checkpoint,
+        )
 
     # `run.end` must agree with the top-level RunResponse fields — the UI takes
     # the message from one and the timeline from the other.

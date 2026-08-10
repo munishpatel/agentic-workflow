@@ -54,8 +54,12 @@ class Run(SQLModel, table=True):
     workflow_id: str = Field(index=True, foreign_key="workflow.id")
     user_message: str
     final_response: str = ""
-    status: str = "ok"  # "ok" | "error"
+    status: str = "ok"  # "ok" | "error" | "paused"
     events: list[dict[str, Any]] = Field(default_factory=list, sa_column=Column(JSON))
+    # Set only while `status == "paused"`: the frozen run, waiting on a human
+    # verdict for a gated tool call. Cleared once the run finishes, because a
+    # finished run must not be resumable — the outbox is not an undo stack.
+    checkpoint: dict[str, Any] | None = Field(default=None, sa_column=Column(JSON))
     input_tokens: int = 0
     output_tokens: int = 0
     duration_ms: int = 0

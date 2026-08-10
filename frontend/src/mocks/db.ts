@@ -19,6 +19,21 @@ export interface StoredRun {
   usage: Usage
   duration_ms: number
   created_at: string
+  status: 'ok' | 'error' | 'paused'
+  /**
+   * The mock's stand-in for the server's checkpoint. It cannot re-run a graph,
+   * so instead of freezing state it keeps the events the run *would* have
+   * produced and replays them once a verdict arrives. Enough to make the demo
+   * behave like the real thing at the boundary, which is all the mock claims.
+   */
+  held?: {
+    call_id: string
+    tool: string
+    input: Record<string, unknown>
+    node_id: string | null
+    remainingEvents: RunEvent[]
+    finalResponse: string
+  }
 }
 
 interface Database {
@@ -108,16 +123,25 @@ export const mockDb = {
 
   run: (runId: string) => db.runs.find((run) => run.run_id === runId),
 
+  replaceRun(run: StoredRun) {
+    // A resumed run replaces its row rather than adding one — same run id, same
+    // timeline continued, exactly as the service does it.
+    db.runs = db.runs.map((existing) => (existing.run_id === run.run_id ? run : existing))
+    persist()
+    return run
+  },
+
   runsFor(workflowId: string): RunSummary[] {
     return db.runs
       .filter((run) => run.workflow_id === workflowId)
-      .map(({ run_id, user_message, final_response, created_at, usage, duration_ms }) => ({
+      .map(({ run_id, user_message, final_response, created_at, usage, duration_ms, status }) => ({
         run_id,
         user_message,
         final_response,
         created_at,
         usage,
         duration_ms,
+        status,
       }))
   },
 

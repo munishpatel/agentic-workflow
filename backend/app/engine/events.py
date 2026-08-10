@@ -19,6 +19,12 @@ RunEventType = Literal[
     "tool.call",
     "tool.result",
     "route.decision",
+    # A gated tool call stopped the run here, and this is the call a human is
+    # being asked about. The matching `tool.result` only ever arrives after an
+    # `approval.decision` — which is what makes "nothing ran unreviewed"
+    # readable straight off the log rather than taken on trust.
+    "approval.required",
+    "approval.decision",
 ]
 
 PREVIEW_LIMIT = 200
@@ -73,6 +79,22 @@ class EventBus:
         self.run_id = run_id
         self._seq = 0
         self.events: list[RunEvent] = []
+
+    @classmethod
+    def restore(cls, run_id: str, events: list[dict[str, Any]]) -> "EventBus":
+        """
+        A bus that continues a run rather than starting one.
+
+        A run that pauses for approval and resumes is **one** run with one
+        timeline, so the second segment appends to the first and `seq` picks up
+        where it left off. Rebuilding from `max(seq) + 1` rather than `len` is
+        deliberate: a malformed stored log should still yield ids that sort
+        after everything already in it.
+        """
+        bus = cls(run_id)
+        bus.events = [RunEvent.model_validate(event) for event in events]
+        bus._seq = max((event.seq for event in bus.events), default=-1) + 1
+        return bus
 
     def emit(
         self,

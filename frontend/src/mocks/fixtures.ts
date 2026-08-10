@@ -161,6 +161,7 @@ export const TOOLS: ToolMeta[] = [
       },
       required: ['expression'],
     },
+    requires_approval: false,
   },
   {
     id: 'web_search',
@@ -181,6 +182,7 @@ export const TOOLS: ToolMeta[] = [
       },
       required: ['query'],
     },
+    requires_approval: false,
   },
   {
     id: 'send_email',
@@ -196,6 +198,9 @@ export const TOOLS: ToolMeta[] = [
       },
       required: ['to', 'subject', 'body'],
     },
+    // The one gated tool: the engine pauses the run at this call and will not
+    // execute it without a human verdict.
+    requires_approval: true,
   },
   {
     id: 'current_datetime',
@@ -212,6 +217,7 @@ export const TOOLS: ToolMeta[] = [
         },
       },
     },
+    requires_approval: false,
   },
 ]
 
@@ -588,6 +594,66 @@ export function buildMathRun(runId: string, message: string, startedAt: number):
 
   const usage = { input_tokens: 1920, output_tokens: 204 }
   const duration = 1830
+  log.runEnd(answer, usage, duration)
+
+  return { events: log.events, final_response: answer, usage, duration_ms: duration }
+}
+
+/**
+ * A run that calls the one gated tool.
+ *
+ * Written as an ordinary complete run — `send_email` called, result, answer.
+ * The handler is what cuts it at the gated call and holds the rest back, which
+ * keeps the fixture honest about what the workflow *would* do and keeps the
+ * pausing logic in exactly one place.
+ */
+export function buildEmailRun(runId: string, message: string, startedAt: number): MockRun {
+  const log = new EventLog(runId, startedAt)
+  const answer =
+    'Sent. The digest went to **team@example.com** with the subject “Weekly research digest”.'
+
+  log.runStart(MATH.id, MATH.name)
+  log.nodeStart('m_in', 'input', 'Start')
+  log.nodeEnd('m_in', 'input', 'Start', 1)
+  log.edgeTransfer(
+    { node_id: 'm_in', port: 'message' },
+    { node_id: 'm_agent', port: 'prompt' },
+    'text',
+    message,
+  )
+
+  log.nodeStart('m_agent', 'agent', 'Calculate')
+  log.llmRequest('m_agent', 1, MATH.model, 2)
+  log.llmResponse('m_agent', 1, { input_tokens: 610, output_tokens: 88 }, 'tool_call', 640)
+  log.toolCall('m_agent', 'call_email_1', 'send_email', {
+    to: 'team@example.com',
+    subject: 'Weekly research digest',
+    body: 'Three sources on typed agent graphs, summarised.',
+  })
+  log.toolResult(
+    'm_agent',
+    'call_email_1',
+    'send_email',
+    'Email recorded for team@example.com with subject “Weekly research digest”. This environment mocks delivery — nothing was actually sent.',
+    false,
+    6,
+  )
+  log.llmRequest('m_agent', 2, MATH.model, 2)
+  log.llmResponse('m_agent', 2, { input_tokens: 780, output_tokens: 64 }, 'end', 520)
+  log.textMessage('m_agent', answer)
+  log.nodeEnd('m_agent', 'agent', 'Calculate', 1240)
+
+  log.edgeTransfer(
+    { node_id: 'm_agent', port: 'text' },
+    { node_id: 'm_out', port: 'response' },
+    'text',
+    answer,
+  )
+  log.nodeStart('m_out', 'output', 'Reply')
+  log.nodeEnd('m_out', 'output', 'Reply', 1)
+
+  const usage = { input_tokens: 1390, output_tokens: 152 }
+  const duration = 1420
   log.runEnd(answer, usage, duration)
 
   return { events: log.events, final_response: answer, usage, duration_ms: duration }

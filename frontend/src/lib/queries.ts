@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import type {
   NodeKindSpec,
   ProviderMeta,
+  ResumeRunRequest,
   RunRequest,
   RunResponse,
   RunSummary,
@@ -160,6 +161,28 @@ export function useRunWorkflow() {
     onSuccess: (run, { id }) => {
       queryClient.setQueryData(queryKeys.run(run.run_id), run)
       void queryClient.invalidateQueries({ queryKey: queryKeys.workflowRuns(id) })
+      void queryClient.invalidateQueries({ queryKey: queryKeys.emails })
+    },
+  })
+}
+
+/**
+ * Rules on the gated calls a paused run is holding and lets it finish.
+ *
+ * It returns the same `RunResponse` as `/run`, so the caller replaces the turn
+ * wholesale rather than merging two payloads — and a run that pauses a second
+ * time needs no special handling on the way back.
+ */
+export function useResumeRun() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ runId, request }: { runId: string; request: ResumeRunRequest }) =>
+      api.post<RunResponse>(`/runs/${runId}/resume`, request),
+    onSuccess: (run) => {
+      queryClient.setQueryData(queryKeys.run(run.run_id), run)
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workflows })
+      // An approved send lands in the outbox; a rejected one must not appear
+      // there, and refetching is how the page proves which happened.
       void queryClient.invalidateQueries({ queryKey: queryKeys.emails })
     },
   })

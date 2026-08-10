@@ -107,6 +107,24 @@ A live run and a replayed one go through the same reducer, so a stored run canno
 drift from a fresh one. It already handles `partial`/`final` deltas, so adding
 streaming changes only what feeds it. Sorting is by `seq`, never `ts`.
 
+### Human approval
+
+A tool the backend marks `requires_approval` — currently only `send_email` —
+stops the run at the call. The turn renders an approve/reject card above its
+timeline, and the verdict goes to `POST /runs/{id}/resume`, which returns the
+same `RunResponse` shape as `/run`. So the whole feature is one extra branch in
+the chat page: a run that pauses, a run that resumes and a run that pauses a
+_second_ time all land in the same handler.
+
+Two consequences are deliberate. The composer is **disabled** while a turn is
+awaiting — starting a second run would strand the approval on a conversation
+that has moved on. And a paused turn **survives a refresh**, because the run is
+genuinely parked on the server, not just in this tab.
+
+`pendingApprovals` is derived from the log by the reducer rather than read off
+the response, which is what lets a replayed run show its held calls without a
+second request.
+
 ### State boundary
 
 Three stores, non-overlapping:
@@ -148,6 +166,7 @@ reachable by keyword:
 | anything         | A normal run with a full timeline               |
 | `…fail…`         | A tool call errors and the agent recovers       |
 | `…refuse…`       | The run ends in `run.error` with code `refusal` |
+| `…email…`        | The run pauses at the gated `send_email` call   |
 | `boom`           | HTTP 500                                        |
 | `nokey`          | HTTP 401 `missing_api_key`                      |
 
@@ -193,3 +212,5 @@ real browser during development.
 - The unsaved-changes guard does not use `useBlocker`, which needs a data router;
   in-app exits route through a confirm dialog and `beforeunload` covers the tab.
 - Single theme. The CSS variables are in place if dark mode is ever wanted.
+- An approval decides every call the run is holding at once; there is no
+  per-call approve/reject when a single turn gates more than one.

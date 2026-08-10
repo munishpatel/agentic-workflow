@@ -87,6 +87,7 @@ All routes are under `/api`.
 | `DELETE` | `/workflows/{id}` | Delete |
 | `POST` | `/workflows/{id}/validate` | Validate the graph without running it |
 | `POST` | `/workflows/{id}/run` | Execute; returns the final response and event log |
+| `POST` | `/runs/{id}/resume` | Approve or reject the tool calls a paused run is holding |
 | `GET` | `/workflows/{id}/runs` | Run history |
 | `GET` | `/runs/{id}` | Fetch one run |
 | `GET` | `/node-kinds` | Port contracts and config JSON Schemas |
@@ -107,7 +108,36 @@ tools were called and where it stopped is the useful part of a failed run.
 | Graph has error-level issues | 422 | `validation_error` (issues in `details`) |
 | Provider rate limit | 200 | `rate_limit` (in `run.error`) |
 | Provider auth / unavailable | 200 | `provider_auth` / `provider_unavailable` |
+| Resuming a run that is not paused | 409 | `run_not_paused` |
+| Resume missing a verdict for a held call | 422 | `missing_decision` (ids in `details`) |
 | Unhandled | 500 | `internal_error` (traceback logged, not returned) |
+
+### Human approval for high-impact tools
+
+A tool declares `requires_approval = True` and the engine will not run it on the
+model's say-so. `send_email` is the only one — every other tool reads; that one
+writes, and in a non-mocked deployment it puts something in front of a person.
+
+When a run reaches a gated call it **pauses**: `POST /run` returns 200 with
+`status: "paused"`, the held calls in `pending_approvals`, and a log ending in
+`approval.required` — no `tool.result`, no `run.end`. The frozen run is stored in
+`run.checkpoint`. `POST /runs/{id}/resume` supplies the verdicts, and the run
+finishes on the *same* run id with the *same* timeline continued.
+
+Three properties are worth knowing, because each is a decision rather than a
+detail:
+
+- **The graph travels with the checkpoint.** A verdict authorises the call the
+  reviewer was shown, so editing the workflow while it waits cannot change what
+  the click executes.
+- **Ungated siblings still run.** A `web_search` issued in the same model turn is
+  dispatched immediately; only the gated call is held.
+- **A rejection is a value, not a crash.** The model gets an error-flagged result
+  telling it the call was declined and not to retry it, then carries on — so the
+  agent can explain the decline rather than the run simply dying.
+
+Both a gated call inside an agent's tool loop and a gated `tool` node pause the
+same way. See `app/engine/checkpoint.py`.
 
 ## Project structure
 
@@ -215,16 +245,23 @@ uv run pytest        # 222 tests, no API key or network access needed
 | `test_events.py` | `seq` uniqueness under 400 concurrent emissions |
 | `test_api_workflows.py` | CRUD, round-tripping, error envelope |
 | `test_api_conformance.py` | The frontend's acceptance suite, ported |
+| `test_approvals.py` | The gate: nothing runs unreviewed, and resuming loses nothing |
 
 The suite neutralises ambient credentials in `conftest.py`, so a populated `.env`
 cannot change the result.
 
 ## Limitations
 
-- `create_all` on startup rather than Alembic migrations.
+- `create_all` on startup rather than Alembic migrations. New nullable columns
+  are added to an existing database on boot; anything that drops, renames or
+  backfills is the point where Alembic stops being optional.
 - `web_search` returns labelled placeholders only when no key of either kind is
   set.
 - `tool` node arguments are literal only — no per-argument wired ports.
 - Responses are not streamed.
-- `send_email` records to an outbox rather than sending.
+- `send_email` records to an outbox rather than sending — but it is gated on a
+  human approval regardless, so swapping in a real mail server does not require
+  remembering to add the gate.
+- A paused run waits indefinitely; there is no approval expiry or reviewer
+  identity, and anyone who can reach the API can approve.
 - No auth, multi-tenancy, pagination or rate limiting.

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, ChevronRight, Loader2 } from 'lucide-react'
+import { AlertTriangle, ChevronRight, Loader2, ShieldAlert } from 'lucide-react'
 import type { TimelineView } from '@/types/ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { EdgeTransferChip } from '@/components/chat/EdgeTransferChip'
@@ -53,6 +53,14 @@ export function Timeline({ view, labels = {}, toolNames, defaultOpen = false }: 
         )}
         {view.status === 'running' && (
           <Loader2 className="ml-auto size-3.5 animate-spin" aria-hidden />
+        )}
+        {/* Not a spinner: a paused run is not working on anything, and one that
+            keeps spinning while it waits reads as a hang. */}
+        {view.status === 'paused' && (
+          <ShieldAlert
+            className="ml-auto size-3.5 text-amber-600 dark:text-amber-500"
+            aria-label="Waiting for approval"
+          />
         )}
       </button>
 

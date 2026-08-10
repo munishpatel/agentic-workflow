@@ -43,6 +43,8 @@ export type RunEventType =
   | 'tool.call'
   | 'tool.result'
   | 'route.decision'
+  | 'approval.required'
+  | 'approval.decision'
 
 export interface Usage {
   input_tokens: number
@@ -118,6 +120,23 @@ export interface RouteDecisionPayload {
   reason: string
   considered: string[]
 }
+/**
+ * A gated tool call stopped the run here. The matching `tool.result` only ever
+ * follows an `approval.decision`, so "nothing ran unreviewed" is readable
+ * straight off the log rather than taken on trust.
+ */
+export interface ApprovalRequiredPayload {
+  call_id: string
+  tool: string
+  input: Record<string, unknown>
+}
+export interface ApprovalDecisionPayload {
+  call_id: string
+  tool: string
+  approved: boolean
+  /** The reviewer's reason. Passed to the model, so it may be shown verbatim. */
+  note: string
+}
 
 type Event<T extends RunEventType, P> = RunEventEnvelope & { type: T; payload: P }
 
@@ -135,6 +154,8 @@ export type TextMessageEvent = Event<'text.message', TextMessagePayload>
 export type ToolCallEvent = Event<'tool.call', ToolCallPayload>
 export type ToolResultEvent = Event<'tool.result', ToolResultPayload>
 export type RouteDecisionEvent = Event<'route.decision', RouteDecisionPayload>
+export type ApprovalRequiredEvent = Event<'approval.required', ApprovalRequiredPayload>
+export type ApprovalDecisionEvent = Event<'approval.decision', ApprovalDecisionPayload>
 
 /**
  * Discriminated by `type`. The reducer still handles an unrecognised `type`
@@ -156,3 +177,5 @@ export type RunEvent =
   | ToolCallEvent
   | ToolResultEvent
   | RouteDecisionEvent
+  | ApprovalRequiredEvent
+  | ApprovalDecisionEvent

@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { MessagesSquare } from 'lucide-react'
 import type { ChatMessage } from '@/types/ui'
 import { EmptyState } from '@/components/common/EmptyState'
+import type { ApprovalVerdict } from '@/components/chat/ApprovalRequest'
 import { MessageBubble } from '@/components/chat/MessageBubble'
 
 interface MessageListProps {
@@ -9,9 +10,17 @@ interface MessageListProps {
   labels?: Record<string, string>
   toolNames?: Record<string, string>
   emptyHint?: string
+  /** Omitted by read-only views, which show approvals as history. */
+  onDecide?: (message: ChatMessage, verdicts: ApprovalVerdict[]) => void
 }
 
-export function MessageList({ messages, labels, toolNames, emptyHint }: MessageListProps) {
+export function MessageList({
+  messages,
+  labels,
+  toolNames,
+  emptyHint,
+  onDecide,
+}: MessageListProps) {
   const bottomRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -43,6 +52,7 @@ export function MessageList({ messages, labels, toolNames, emptyHint }: MessageL
           labels={labels}
           toolNames={toolNames}
           expandTimeline={message.id === firstAssistantId}
+          onDecide={onDecide}
         />
       ))}
       <div ref={bottomRef} />

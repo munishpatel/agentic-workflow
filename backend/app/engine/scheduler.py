@@ -4,7 +4,20 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.engine.agent_loop import build_history, compose_system_prompt, run_agent_loop
+from app.engine.agent_loop import (
+    build_history,
+    compose_system_prompt,
+    rejection_result,
+    run_agent_loop,
+)
+from app.engine.checkpoint import (
+    ApprovalDecision,
+    LoopPaused,
+    NodePause,
+    NodePaused,
+    PendingCall,
+    RunCheckpoint,
+)
 from app.engine.events import EventBus, truncate_preview
 from app.engine.router import decide_route
 from app.errors import NodeLimitError, RunError, StarvedOutputError, ValidationFailedError
@@ -21,6 +34,7 @@ from app.graph.validate import validate_graph
 from app.llm.base import LLMProvider, Usage
 from app.tools.base import ToolContext
 from app.tools.dispatch import dispatch
+from app.tools.registry import requires_approval
 
 logger = logging.getLogger("app.engine.scheduler")
 
@@ -34,6 +48,9 @@ class RunOutcome:
     usage: Usage = field(default_factory=Usage)
     duration_ms: int = 0
     status: str = "ok"
+    # Set only when `status == "paused"`: everything needed to finish this run
+    # once a human has ruled on the gated calls.
+    checkpoint: RunCheckpoint | None = None
 
 
 @dataclass
@@ -59,6 +76,12 @@ async def run_graph(
     history: list[dict[str, str]],
     bus: EventBus,
     tool_ctx: ToolContext,
+    # The key `workflow.provider` holds, not the instance's own `id`. It is the
+    # only one that round-trips: resuming has to look the provider back up in
+    # the registry, and that lookup is keyed by the workflow's value.
+    provider_id: str = "",
+    resume: RunCheckpoint | None = None,
+    decisions: dict[str, ApprovalDecision] | None = None,
 ) -> RunOutcome:
     """
     Data-flow execution over the DAG.
@@ -66,6 +89,12 @@ async def run_graph(
     Not a `for` loop over a list — that is the whole argument for the graph
     model. Fan-out and join fall out of this shape with no extra code, and
     branch pruning has somewhere to live.
+
+    A gated tool call suspends the whole run: the node raises `NodePaused`, and
+    because a batch is gathered before anything is delivered, its siblings still
+    finish and land in `state` first. That ordering is the point — pausing must
+    cost the run nothing it has already earned, or a slow reviewer turns every
+    parallel branch into wasted tokens.
     """
     started = time.perf_counter()
 
@@ -77,30 +106,43 @@ async def run_graph(
         )
 
     by_id = {node.id: node for node in nodes}
-    state = _State()
 
-    bus.emit("run.start", {"workflow_id": workflow_id, "workflow_name": workflow_name})
+    if resume is None:
+        state = _State()
+        bus.emit("run.start", {"workflow_id": workflow_id, "workflow_name": workflow_name})
+        entry = next(node for node in nodes if node.kind == "input")
+        state.values[(entry.id, "__seed__")] = message
+        # node_id → the pause it is resuming from. Empty on a fresh run.
+        resuming: dict[str, NodePause] = {}
+        elapsed_before = 0
+    else:
+        state = _restore_state(resume)
+        resuming = {pause.node_id: pause for pause in resume.paused}
+        elapsed_before = resume.elapsed_ms
 
-    entry = next(node for node in nodes if node.kind == "input")
-    state.values[(entry.id, "__seed__")] = message
+    verdicts = dict(decisions or {})
 
     while True:
-        ready = [
-            node
-            for node in nodes
-            if node.id not in state.done
-            and node.id not in state.pruned
-            and _is_ready(node, edges, state)
-        ]
+        if resuming:
+            # The resume batch: only the nodes that were holding, and they are
+            # ready by definition — their inputs were satisfied before the pause.
+            ready = [by_id[node_id] for node_id in resuming if node_id in by_id]
+        else:
+            ready = [
+                node
+                for node in nodes
+                if node.id not in state.done
+                and node.id not in state.pruned
+                and _is_ready(node, edges, state)
+            ]
+            state.executions += len(ready)
+            if state.executions > MAX_NODE_EXECUTIONS:
+                raise NodeLimitError(
+                    f"This workflow ran more than {MAX_NODE_EXECUTIONS} nodes. "
+                    "Check for a branch that fans out further than intended."
+                )
         if not ready:
             break
-
-        state.executions += len(ready)
-        if state.executions > MAX_NODE_EXECUTIONS:
-            raise NodeLimitError(
-                f"This workflow ran more than {MAX_NODE_EXECUTIONS} nodes. "
-                "Check for a branch that fans out further than intended."
-            )
 
         results = await asyncio.gather(
             *(
@@ -115,15 +157,30 @@ async def run_graph(
                     history=history,
                     bus=bus,
                     tool_ctx=tool_ctx,
+                    resume=resuming.get(node.id),
+                    decisions=verdicts,
                 )
                 for node in ready
             ),
             return_exceptions=True,
         )
+        # Both are single-use: a verdict settles one call, and a resumed node is
+        # an ordinary node from here on.
+        resuming = {}
+        verdicts = {}
 
+        pauses: list[NodePause] = []
+        failure: BaseException | None = None
         for node, result in zip(ready, results, strict=True):
+            if isinstance(result, NodePaused):
+                pauses.append(result.pause)
+                continue
             if isinstance(result, BaseException):
-                raise result
+                # Keep going rather than raising here — the siblings that
+                # succeeded still have values worth delivering, and the event
+                # log is the thing the user reads afterwards.
+                failure = failure or result
+                continue
             state.done.add(node.id)
             _deliver(node, result, edges, by_id, state, bus)
             if node.kind == "router":
@@ -131,6 +188,32 @@ async def run_graph(
                 _prune_branches(node, chosen, nodes, edges, state, bus)
             if node.kind == "output":
                 state.final_response = str(result.get("__final__", ""))
+
+        if failure is not None:
+            # A failure anywhere in the batch outranks a pause: there is no
+            # point asking a human about a send whose run is already dead.
+            raise failure
+
+        if pauses:
+            return RunOutcome(
+                usage=state.usage,
+                duration_ms=elapsed_before + int((time.perf_counter() - started) * 1000),
+                status="paused",
+                checkpoint=_checkpoint(
+                    nodes=nodes,
+                    edges=edges,
+                    workflow_id=workflow_id,
+                    workflow_name=workflow_name,
+                    provider_id=provider_id,
+                    model=model,
+                    system_prompt=system_prompt,
+                    message=message,
+                    history=history,
+                    state=state,
+                    pauses=pauses,
+                    elapsed_ms=elapsed_before + int((time.perf_counter() - started) * 1000),
+                ),
+            )
 
     if state.final_response is None:
         starved = _first_starved_node(nodes, edges, state)
@@ -140,11 +223,64 @@ async def run_graph(
             details={"node_id": starved},
         )
 
-    duration_ms = int((time.perf_counter() - started) * 1000)
+    duration_ms = elapsed_before + int((time.perf_counter() - started) * 1000)
     return RunOutcome(
         final_response=state.final_response,
         usage=state.usage,
         duration_ms=duration_ms,
+    )
+
+
+def _restore_state(checkpoint: RunCheckpoint) -> _State:
+    """The scheduler's state as it stood when the run paused."""
+    state = _State()
+    state.values = {(node_id, port): value for node_id, port, value in checkpoint.values}
+    state.done = set(checkpoint.done)
+    state.pruned = set(checkpoint.pruned)
+    state.executions = checkpoint.executions
+    state.usage = checkpoint.usage
+    state.final_response = checkpoint.final_response
+    return state
+
+
+def _checkpoint(
+    *,
+    nodes: list[Node],
+    edges: list[Edge],
+    workflow_id: str,
+    workflow_name: str,
+    provider_id: str,
+    model: str,
+    system_prompt: str,
+    message: str,
+    history: list[dict[str, str]],
+    state: _State,
+    pauses: list[NodePause],
+    elapsed_ms: int,
+) -> RunCheckpoint:
+    """
+    Freeze the run. The graph travels *with* the checkpoint rather than being
+    re-read on resume — see `RunCheckpoint` for why that is a correctness
+    requirement and not an optimisation.
+    """
+    return RunCheckpoint(
+        workflow_id=workflow_id,
+        workflow_name=workflow_name,
+        provider_id=provider_id,
+        model=model,
+        system_prompt=system_prompt,
+        message=message,
+        history=history,
+        nodes=nodes,
+        edges=edges,
+        values=[(node_id, port, value) for (node_id, port), value in state.values.items()],
+        done=sorted(state.done),
+        pruned=sorted(state.pruned),
+        executions=state.executions,
+        usage=state.usage,
+        final_response=state.final_response,
+        elapsed_ms=elapsed_ms,
+        paused=pauses,
     )
 
 
@@ -197,8 +333,15 @@ async def _run_node(
     history: list[dict[str, str]],
     bus: EventBus,
     tool_ctx: ToolContext,
+    resume: NodePause | None = None,
+    decisions: dict[str, ApprovalDecision] | None = None,
 ) -> dict[str, Any]:
-    bus.emit("node.start", {"kind": node.kind, "label": node.label}, node_id=node.id)
+    # A resumed node emits no second `node.start`. One node that paused is one
+    # step in the timeline, not two — and the frontend's reducer keys its groups
+    # by node id, so a second start would split the node's own tool calls across
+    # two boxes with the approval sitting between them.
+    if resume is None:
+        bus.emit("node.start", {"kind": node.kind, "label": node.label}, node_id=node.id)
     started = time.perf_counter()
     try:
         async with asyncio.timeout(NODE_TIMEOUT_SECONDS):
@@ -212,12 +355,17 @@ async def _run_node(
                 history=history,
                 bus=bus,
                 tool_ctx=tool_ctx,
+                resume=resume,
+                decisions=decisions,
             )
     except TimeoutError as exc:
         raise RunError(
             f"{node.label or node.id} took longer than {NODE_TIMEOUT_SECONDS} seconds."
         ) from exc
 
+    # For a resumed node this times the segment after the verdict, not the wall
+    # clock since `node.start`. However long the reviewer took is their latency,
+    # not the node's, and folding it in would make every gated node look slow.
     ms = int((time.perf_counter() - started) * 1000)
     bus.emit("node.end", {"kind": node.kind, "label": node.label, "ms": ms}, node_id=node.id)
     return outputs
@@ -234,6 +382,8 @@ async def _execute(
     history: list[dict[str, str]],
     bus: EventBus,
     tool_ctx: ToolContext,
+    resume: NodePause | None = None,
+    decisions: dict[str, ApprovalDecision] | None = None,
 ) -> dict[str, Any]:
     if node.kind == "input":
         return {"message": message, "history": history}
@@ -248,18 +398,25 @@ async def _execute(
         context = state.values.get((node.id, "context"))
         if context:
             prompt = f"{prompt}\n\n## Additional context\n{context}"
-        turn = await run_agent_loop(
-            provider=provider,
-            model=model,
-            system=compose_system_prompt(system_prompt, node.label, config.instruction),
-            prompt=prompt,
-            history=build_history(history),
-            tool_ids=config.tools,
-            max_iterations=config.max_tool_iterations,
-            bus=bus,
-            node_id=node.id,
-            tool_ctx=tool_ctx,
-        )
+        try:
+            turn = await run_agent_loop(
+                provider=provider,
+                model=model,
+                system=compose_system_prompt(system_prompt, node.label, config.instruction),
+                prompt=prompt,
+                history=build_history(history),
+                tool_ids=config.tools,
+                max_iterations=config.max_tool_iterations,
+                bus=bus,
+                node_id=node.id,
+                tool_ctx=tool_ctx,
+                resume=resume.loop if resume is not None else None,
+                decisions=decisions,
+            )
+        except LoopPaused as paused:
+            raise NodePaused(
+                NodePause(node_id=node.id, kind="agent", loop=paused.checkpoint)
+            ) from None
         state.usage = state.usage + turn.usage
         return {"text": turn.text}
 
@@ -282,16 +439,51 @@ async def _execute(
 
     if node.kind == "tool":
         config = ToolNodeConfig.model_validate(node.config)
+        call_id = f"node_{node.id}"
+
+        if resume is not None:
+            # Second visit: a human has ruled on this node's single call.
+            return await _settle_tool_node(
+                node=node,
+                config=config,
+                call_id=call_id,
+                decisions=decisions or {},
+                bus=bus,
+                tool_ctx=tool_ctx,
+            )
+
         bus.emit(
             "tool.call",
-            {"call_id": f"node_{node.id}", "tool": config.tool_id, "input": config.args},
+            {"call_id": call_id, "tool": config.tool_id, "input": config.args},
             node_id=node.id,
         )
+        # The gate is a property of the tool, so it applies here exactly as it
+        # does inside an agent — a literal `send_email` node wired into a graph
+        # is not a way around the review.
+        if requires_approval(config.tool_id):
+            bus.emit(
+                "approval.required",
+                {"call_id": call_id, "tool": config.tool_id, "input": config.args},
+                node_id=node.id,
+            )
+            raise NodePaused(
+                NodePause(
+                    node_id=node.id,
+                    kind="tool",
+                    call=PendingCall(
+                        call_id=call_id,
+                        node_id=node.id,
+                        tool=config.tool_id,
+                        input=config.args,
+                    ),
+                )
+            )
+
         outcome = await dispatch(config.tool_id, config.args, tool_ctx)
         bus.emit(
             "tool.result",
             {
-                "call_id": f"node_{node.id}",
+                "call_id": call_id,
                 "tool": config.tool_id,
                 "output": outcome.result.output,
                 "is_error": outcome.result.is_error,
@@ -302,6 +494,53 @@ async def _execute(
         return {"result": outcome.result.output}
 
     raise RunError(f"“{node.kind}” is not a node kind this server can execute.")
+
+
+async def _settle_tool_node(
+    *,
+    node: Node,
+    config: ToolNodeConfig,
+    call_id: str,
+    decisions: dict[str, ApprovalDecision],
+    bus: EventBus,
+    tool_ctx: ToolContext,
+) -> dict[str, Any]:
+    """
+    A gated tool node, after the verdict.
+
+    A rejection is not a run failure: it produces an error-flagged result that
+    flows down the node's `result` port like any other. That is the same shape
+    a tool that raised would produce, so downstream nodes need no new case —
+    and the graph gets to decide what a decline means rather than the engine
+    deciding for it.
+    """
+    decision = decisions.get(call_id)
+    approved = decision is not None and decision.approved
+    note = decision.note if decision is not None else ""
+    bus.emit(
+        "approval.decision",
+        {"call_id": call_id, "tool": config.tool_id, "approved": approved, "note": note},
+        node_id=node.id,
+    )
+
+    if approved:
+        outcome = await dispatch(config.tool_id, config.args, tool_ctx)
+        result, ms = outcome.result, outcome.ms
+    else:
+        result, ms = rejection_result(config.tool_id, note), 0
+
+    bus.emit(
+        "tool.result",
+        {
+            "call_id": call_id,
+            "tool": config.tool_id,
+            "output": result.output,
+            "is_error": result.is_error,
+            "ms": ms,
+        },
+        node_id=node.id,
+    )
+    return {"result": result.output}
 
 
 def _deliver(

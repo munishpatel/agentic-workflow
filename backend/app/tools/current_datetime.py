@@ -27,6 +27,7 @@ class CurrentDateTime:
         "training data has no idea what today's date is."
     )
     Input: ClassVar[type[BaseModel]] = DateTimeInput
+    requires_approval: ClassVar[bool] = False
 
     async def execute(self, args: DateTimeInput, ctx: ToolContext) -> ToolResult:
         try:

@@ -1,5 +1,12 @@
 import type { RunEvent } from '@/types/events'
-import type { MessageEntry, NodeStep, TimelineStep, TimelineView, ToolEntry } from '@/types/ui'
+import type {
+  MessageEntry,
+  NodeStep,
+  PendingApprovalEntry,
+  TimelineStep,
+  TimelineView,
+  ToolEntry,
+} from '@/types/ui'
 
 /**
  * The one place run events are interpreted.
@@ -22,6 +29,7 @@ export function reduceEvents(events: RunEvent[]): TimelineView {
     usage: { input_tokens: 0, output_tokens: 0 },
     durationMs: 0,
     error: null,
+    pendingApprovals: [],
     counts: { nodes: 0, toolCalls: 0 },
   }
 
@@ -34,6 +42,13 @@ export function reduceEvents(events: RunEvent[]): TimelineView {
    * the user just watched, not to a phantom one appended at the bottom.
    */
   const latestGroups = new Map<string, NodeStep>()
+
+  /**
+   * Calls held by an `approval.required` that no `approval.decision` has yet
+   * answered. A Map keyed by call id so a resumed run — which replays both
+   * events — settles back to empty rather than double-counting.
+   */
+  const awaiting = new Map<string, PendingApprovalEntry>()
 
   function groupFor(nodeId: string | undefined): NodeStep | null {
     if (!nodeId) return null
@@ -181,6 +196,46 @@ export function reduceEvents(events: RunEvent[]): TimelineView {
         break
       }
 
+      case 'approval.required': {
+        const group = groupFor(event.node_id)
+        // Mark the call the run is holding rather than appending a second
+        // card — the reviewer needs to see the arguments in the tool call they
+        // are ruling on, not next to it.
+        const call = group?.entries.find(
+          (entry): entry is ToolEntry =>
+            entry.type === 'tool' && entry.callId === event.payload.call_id,
+        )
+        if (call) {
+          call.approval = 'awaiting'
+          call.pending = false
+        }
+        if (group) group.status = 'awaiting'
+        awaiting.set(event.payload.call_id, {
+          callId: event.payload.call_id,
+          nodeId: event.node_id ?? null,
+          tool: event.payload.tool,
+          input: event.payload.input,
+        })
+        break
+      }
+
+      case 'approval.decision': {
+        const group = groupFor(event.node_id)
+        const call = group?.entries.find(
+          (entry): entry is ToolEntry =>
+            entry.type === 'tool' && entry.callId === event.payload.call_id,
+        )
+        if (call) {
+          call.approval = event.payload.approved ? 'approved' : 'rejected'
+          if (event.payload.note) call.approvalNote = event.payload.note
+        }
+        // Decided, so no longer awaiting — a resumed run replays both events
+        // and must end up with an empty queue.
+        awaiting.delete(event.payload.call_id)
+        if (group && group.status === 'awaiting') group.status = 'running'
+        break
+      }
+
       case 'route.decision': {
         const group = groupFor(event.node_id)
         if (!group) break
@@ -255,6 +310,14 @@ export function reduceEvents(events: RunEvent[]): TimelineView {
     for (const step of view.steps) {
       if (step.kind === 'node' && step.status === 'running') step.status = 'failed'
     }
+  }
+
+  // Derived from the log, not from a field: a stored run replayed through
+  // `GET /runs/{id}` gets its pending approvals here without the caller having
+  // to thread the server's list in separately.
+  view.pendingApprovals = [...awaiting.values()]
+  if (view.pendingApprovals.length > 0 && view.status === 'running') {
+    view.status = 'paused'
   }
 
   return view

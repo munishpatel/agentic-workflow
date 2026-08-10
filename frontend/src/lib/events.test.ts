@@ -207,3 +207,162 @@ describe('reduceEvents — failures', () => {
     expect(nodes(view.steps).some((step) => step.status === 'running')).toBe(false)
   })
 })
+
+describe('reduceEvents — approvals', () => {
+  const NODE = 'n_mail'
+  const CALL = 'toolu_gate'
+
+  const envelope = {
+    run_id: 'run_gate',
+    ts: START / 1000,
+    author: 'system' as const,
+    partial: false,
+    final: true,
+  }
+
+  const runStart = {
+    ...envelope,
+    id: 'e0',
+    seq: 0,
+    type: 'run.start' as const,
+    payload: { workflow_id: 'wf_1', workflow_name: 'Mailer' },
+  }
+  const nodeStart = {
+    ...envelope,
+    id: 'e1',
+    seq: 1,
+    node_id: NODE,
+    author: 'node' as const,
+    type: 'node.start' as const,
+    payload: { kind: 'agent', label: 'Mailer' },
+  }
+  const toolCall = {
+    ...envelope,
+    id: 'e2',
+    seq: 2,
+    node_id: NODE,
+    author: 'node' as const,
+    type: 'tool.call' as const,
+    payload: { call_id: CALL, tool: 'send_email', input: { to: 'team@example.com' } },
+  }
+  const approvalRequired = {
+    ...envelope,
+    id: 'e3',
+    seq: 3,
+    node_id: NODE,
+    type: 'approval.required' as const,
+    payload: { call_id: CALL, tool: 'send_email', input: { to: 'team@example.com' } },
+  }
+
+  const held: RunEvent[] = [runStart, nodeStart, toolCall, approvalRequired] as RunEvent[]
+
+  const decision = (approved: boolean, note = '') =>
+    ({
+      ...envelope,
+      id: 'e4',
+      seq: 4,
+      node_id: NODE,
+      type: 'approval.decision',
+      payload: { call_id: CALL, tool: 'send_email', approved, note },
+    }) as RunEvent
+
+  const result = (isError: boolean, output: string) =>
+    ({
+      ...envelope,
+      id: 'e5',
+      seq: 5,
+      node_id: NODE,
+      author: 'node',
+      type: 'tool.result',
+      payload: { call_id: CALL, tool: 'send_email', output, is_error: isError, ms: 3 },
+    }) as RunEvent
+
+  const toolOf = (view: ReturnType<typeof reduceEvents>) =>
+    nodes(view.steps)
+      .flatMap((step) => step.entries)
+      .find((entry): entry is ToolEntry => entry.type === 'tool')
+
+  it('reports a held run as paused rather than running', () => {
+    const view = reduceEvents(held)
+    expect(view.status).toBe('paused')
+    expect(view.pendingApprovals).toEqual([
+      {
+        callId: CALL,
+        nodeId: NODE,
+        tool: 'send_email',
+        input: { to: 'team@example.com' },
+      },
+    ])
+  })
+
+  it('marks the held call on the tool it belongs to, not as a separate entry', () => {
+    const view = reduceEvents(held)
+    expect(toolOf(view)).toMatchObject({ approval: 'awaiting', pending: false, tool: 'send_email' })
+    expect(nodes(view.steps).flatMap((step) => step.entries)).toHaveLength(1)
+  })
+
+  it('marks the node itself as awaiting, so it does not spin', () => {
+    const view = reduceEvents(held)
+    expect(nodes(view.steps).find((step) => step.nodeId === NODE)?.status).toBe('awaiting')
+  })
+
+  it('clears the queue once a decision arrives', () => {
+    const view = reduceEvents([...held, decision(true), result(false, 'Email recorded.')])
+    expect(view.pendingApprovals).toEqual([])
+    expect(view.status).not.toBe('paused')
+    expect(toolOf(view)).toMatchObject({ approval: 'approved', isError: false })
+  })
+
+  it('keeps a rejection legible as a decision, not a malfunction', () => {
+    const view = reduceEvents([
+      ...held,
+      decision(false, 'Wrong recipient.'),
+      result(true, 'A human reviewer rejected this send_email call, so it did not run.'),
+    ])
+    expect(view.pendingApprovals).toEqual([])
+    expect(toolOf(view)).toMatchObject({
+      approval: 'rejected',
+      approvalNote: 'Wrong recipient.',
+      isError: true,
+    })
+  })
+
+  it('a run that paused and resumed reduces to exactly one node group', () => {
+    // The server deliberately does not re-emit node.start on resume; this is
+    // the frontend half of that contract.
+    const view = reduceEvents([...held, decision(true), result(false, 'Email recorded.')])
+    expect(nodes(view.steps).filter((step) => step.nodeId === NODE)).toHaveLength(1)
+  })
+
+  it('an ungated call in the same turn keeps its own result', () => {
+    const otherCall = {
+      ...envelope,
+      id: 'e6',
+      seq: 6,
+      node_id: NODE,
+      author: 'node' as const,
+      type: 'tool.call' as const,
+      payload: { call_id: 'toolu_calc', tool: 'calculator', input: { expression: '2+2' } },
+    } as RunEvent
+    const otherResult = {
+      ...envelope,
+      id: 'e7',
+      seq: 7,
+      node_id: NODE,
+      author: 'node' as const,
+      type: 'tool.result' as const,
+      payload: { call_id: 'toolu_calc', tool: 'calculator', output: '4', is_error: false, ms: 1 },
+    } as RunEvent
+
+    const view = reduceEvents([...held, otherCall, otherResult])
+    const entries = nodes(view.steps).flatMap((step) => step.entries)
+    const calculator = entries.find(
+      (entry): entry is ToolEntry => entry.type === 'tool' && entry.tool === 'calculator',
+    )
+    expect(calculator).toMatchObject({ pending: false, output: '4' })
+    // No gate on this one — `undefined` means "not gated", not "undecided".
+    expect(calculator?.approval).toBeUndefined()
+    // Still paused — the ungated sibling finishing does not release the gate.
+    expect(view.status).toBe('paused')
+  })
+})
