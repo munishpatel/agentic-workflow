@@ -30,8 +30,14 @@ async def client(tmp_path, monkeypatch) -> AsyncClient:
     await create_tables()
 
     transport = ASGITransport(app=app.main.app)
-    async with AsyncClient(transport=transport, base_url="http://test") as http:
-        yield http
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as http:
+            yield http
+    finally:
+        # The reloaded engine has its own aiosqlite worker thread. Left
+        # undisposed it outlives this test's event loop and raises "Event loop
+        # is closed" into whichever test happens to be running next.
+        await app.db.engine.dispose()
 
 
 def workflow_input(**overrides) -> dict:

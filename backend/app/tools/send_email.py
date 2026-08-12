@@ -21,6 +21,13 @@ class SendEmail:
     """
     Mocked on purpose: validates, records, and returns a confirmation. Nothing
     leaves the machine. `GET /api/emails` is the evidence it ran.
+
+    It is also the only **gated** tool. Every other tool in the registry reads;
+    this one writes, and in a non-mocked deployment it puts something in front
+    of a real person — so the engine pauses the run at the call and will not
+    execute it without a human verdict. The mock is what makes that cheap to
+    demonstrate, not the reason the gate exists: swapping in a real mail server
+    should not require remembering to add the gate.
     """
 
     id: ClassVar[str] = "send_email"
@@ -28,9 +35,12 @@ class SendEmail:
     description: ClassVar[str] = (
         "Send an email to one recipient. Call this when the user asks for something to be "
         "sent, mailed, or shared with a named address. Mocked in this environment: the "
-        "message is recorded in an outbox and nothing is actually delivered."
+        "message is recorded in an outbox and nothing is actually delivered. A human "
+        "approves or rejects every call before it runs, so write the message as if it were "
+        "going out for real."
     )
     Input: ClassVar[type[BaseModel]] = SendEmailInput
+    requires_approval: ClassVar[bool] = True
 
     async def execute(self, args: SendEmailInput, ctx: ToolContext) -> ToolResult:
         if ctx.session is not None:

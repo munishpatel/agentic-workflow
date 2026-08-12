@@ -1,11 +1,20 @@
 import { HttpResponse, delay, http } from 'msw'
-import type { RunRequest, SentEmail, Workflow, WorkflowInput, WorkflowSummary } from '@/types/api'
+import type {
+  ApprovalDecisionInput,
+  RunRequest,
+  Workflow,
+  WorkflowInput,
+  WorkflowSummary,
+} from '@/types/api'
+import type { RunEvent, ToolCallPayload } from '@/types/events'
 import { createId } from '@/lib/utils'
+import { FALLBACK_MODEL } from '@/lib/workflowDefaults'
 import { mockDb, type StoredRun } from './db'
 import {
   NODE_KINDS,
   PROVIDERS,
   TOOLS,
+  buildEmailRun,
   buildMathRun,
   buildRefusalRun,
   buildResearchRun,
@@ -21,6 +30,7 @@ import { validateWorkflow } from './validate'
  * ones — is reachable in a demo without touching code:
  *   "refuse"  → a run that ends in run.error
  *   "fail"    → a tool call that errors and an agent that recovers
+ *   "email"   → a run that pauses at the gated send_email call
  *   "boom"    → HTTP 500
  *   "nokey"   → HTTP 401 missing_api_key
  */
@@ -66,8 +76,90 @@ function pickRun(workflowId: string, message: string, runId: string, startedAt: 
   const lower = message.toLowerCase()
   if (lower.includes('refuse')) return buildRefusalRun(runId, message, startedAt)
   if (lower.includes('fail')) return buildToolErrorRun(runId, message, startedAt)
+  // "email" is the demo's way into the approval gate — the run this returns
+  // calls send_email, so the handler pauses it and asks.
+  if (lower.includes('email')) return buildEmailRun(runId, message, startedAt)
   if (workflowId === 'wf_math') return buildMathRun(runId, message, startedAt)
   return buildResearchRun(runId, message, startedAt)
+}
+
+/** Tool ids the mock gates, mirroring `requires_approval` on the real registry. */
+const GATED_TOOLS = new Set(TOOLS.filter((tool) => tool.requires_approval).map((tool) => tool.id))
+
+interface GateSplit {
+  before: RunEvent[]
+  after: RunEvent[]
+  call: ToolCallPayload
+  nodeId: string | null
+}
+
+/**
+ * Cut a scripted run at its first gated tool call.
+ *
+ * The `tool.call` stays in `before` — the reviewer needs to see it — and an
+ * `approval.required` is appended after it. Everything from the matching
+ * `tool.result` onwards is held back until a verdict arrives.
+ */
+function splitAtGatedCall(events: RunEvent[]): GateSplit | null {
+  const index = events.findIndex(
+    (event) => event.type === 'tool.call' && GATED_TOOLS.has(event.payload.tool),
+  )
+  if (index === -1) return null
+
+  const call = events[index] as RunEvent & { type: 'tool.call' }
+  const before = events.slice(0, index + 1)
+  const after = events
+    .slice(index + 1)
+    // The held call's own result is replayed by the resume handler, not here.
+    .filter(
+      (event) => !(event.type === 'tool.result' && event.payload.call_id === call.payload.call_id),
+    )
+
+  before.push({
+    id: createId('ev'),
+    run_id: call.run_id,
+    seq: (before.at(-1)?.seq ?? -1) + 1,
+    ts: call.ts,
+    author: 'system',
+    node_id: call.node_id,
+    type: 'approval.required',
+    partial: false,
+    final: true,
+    payload: {
+      call_id: call.payload.call_id,
+      tool: call.payload.tool,
+      input: call.payload.input,
+    },
+  })
+
+  return { before, after, call: call.payload, nodeId: call.node_id ?? null }
+}
+
+/** Re-stamp held events so the resumed log stays strictly ordered by `seq`. */
+function renumber(events: RunEvent[], nextSeq: () => number): RunEvent[] {
+  return events.map((event) => ({ ...event, seq: nextSeq() }))
+}
+
+/** The `RunResponse` body, identical for start, resume and replay. */
+function runBody(run: StoredRun) {
+  return {
+    run_id: run.run_id,
+    final_response: run.final_response,
+    events: run.events,
+    usage: run.usage,
+    duration_ms: run.duration_ms,
+    status: run.status,
+    pending_approvals: run.held
+      ? [
+          {
+            call_id: run.held.call_id,
+            node_id: run.held.node_id ?? '',
+            tool: run.held.tool,
+            input: run.held.input,
+          },
+        ]
+      : [],
+  }
 }
 
 export const handlers = [
@@ -111,6 +203,9 @@ export const handlers = [
       // The real service normalises an absent description to null; the mock
       // must too, or the two disagree on a field the UI renders.
       description: body.description ?? null,
+      // `model` is optional on the way in and always present on the way out —
+      // the server fills it from its configured LLM_MODEL.
+      model: body.model ?? FALLBACK_MODEL,
       id: createId('wf'),
       created_at: now,
       updated_at: now,
@@ -137,6 +232,7 @@ export const handlers = [
     const updated: Workflow = {
       ...body,
       description: body.description ?? null,
+      model: body.model ?? existing.model,
       id: existing.id,
       created_at: existing.created_at,
       updated_at: new Date().toISOString(),
@@ -188,6 +284,34 @@ export const handlers = [
     const startedAt = Date.now()
     const run = pickRun(workflowId, message, runId, startedAt)
 
+    const gate = splitAtGatedCall(run.events)
+
+    if (gate) {
+      // Nothing is written to the outbox here. That is the whole point of the
+      // gate, and a mock that sent anyway would teach the demo the wrong thing.
+      const stored: StoredRun = {
+        run_id: runId,
+        workflow_id: workflowId,
+        user_message: message,
+        final_response: '',
+        events: gate.before,
+        usage: run.usage,
+        duration_ms: run.duration_ms,
+        created_at: new Date().toISOString(),
+        status: 'paused',
+        held: {
+          call_id: gate.call.call_id,
+          tool: gate.call.tool,
+          input: gate.call.input,
+          node_id: gate.nodeId,
+          remainingEvents: gate.after,
+          finalResponse: run.final_response,
+        },
+      }
+      mockDb.insertRun(stored)
+      return HttpResponse.json(runBody(stored))
+    }
+
     const stored: StoredRun = {
       run_id: runId,
       workflow_id: workflowId,
@@ -197,31 +321,123 @@ export const handlers = [
       usage: run.usage,
       duration_ms: run.duration_ms,
       created_at: new Date().toISOString(),
+      status: 'ok',
     }
     mockDb.insertRun(stored)
+    return HttpResponse.json(runBody(stored))
+  }),
 
-    // Any send_email tool call in this run lands in the mock outbox.
-    for (const event of run.events) {
-      if (event.type !== 'tool.call' || event.payload.tool !== 'send_email') continue
-      const input = event.payload.input
-      const email: SentEmail = {
-        id: createId('em'),
-        to: String(input['to'] ?? 'unknown@example.com'),
-        subject: String(input['subject'] ?? '(no subject)'),
-        body: String(input['body'] ?? ''),
-        run_id: runId,
-        created_at: new Date().toISOString(),
-      }
-      mockDb.insertEmail(email)
+  http.post(`${API}/runs/:runId/resume`, async ({ params, request }) => {
+    const run = mockDb.run(String(params['runId']))
+    if (!run) return apiError(404, 'not_found', 'That run does not exist.')
+    if (run.status !== 'paused' || !run.held) {
+      return apiError(409, 'run_not_paused', 'That run is not waiting for an approval.')
     }
 
-    return HttpResponse.json({
-      run_id: runId,
-      final_response: run.final_response,
-      events: run.events,
-      usage: run.usage,
-      duration_ms: run.duration_ms,
-    })
+    const body = (await request.json()) as { decisions?: ApprovalDecisionInput[] }
+    const decisions = Array.isArray(body?.decisions) ? body.decisions : []
+    const decision = decisions.find((entry) => entry.call_id === run.held?.call_id)
+    if (!decision) {
+      return apiError(
+        422,
+        'missing_decision',
+        'Every held tool call needs an approve-or-reject decision before this run can continue.',
+      )
+    }
+
+    await delay(700)
+
+    const held = run.held
+    const note = decision.note ?? ''
+    let seq = (run.events.at(-1)?.seq ?? -1) + 1
+    const next = (event: Omit<RunEvent, 'id' | 'run_id' | 'seq' | 'ts'>): RunEvent =>
+      ({
+        ...event,
+        id: createId('ev'),
+        run_id: run.run_id,
+        seq: seq++,
+        ts: Date.now() / 1000,
+      }) as RunEvent
+
+    const events: RunEvent[] = [
+      ...run.events,
+      next({
+        type: 'approval.decision',
+        author: 'system',
+        node_id: held.node_id ?? undefined,
+        partial: false,
+        final: true,
+        payload: {
+          call_id: held.call_id,
+          tool: held.tool,
+          approved: decision.approved,
+          note,
+        },
+      }),
+    ]
+
+    if (decision.approved) {
+      events.push(...renumber(held.remainingEvents, () => seq++))
+      mockDb.insertEmail({
+        id: createId('em'),
+        to: String(held.input['to'] ?? 'unknown@example.com'),
+        subject: String(held.input['subject'] ?? '(no subject)'),
+        body: String(held.input['body'] ?? ''),
+        run_id: run.run_id,
+        created_at: new Date().toISOString(),
+      })
+    } else {
+      // A rejection produces an error-flagged result and a normal end, mirroring
+      // the service: the run finishes, it just did not do the thing.
+      events.push(
+        next({
+          type: 'tool.result',
+          author: 'node',
+          node_id: held.node_id ?? undefined,
+          partial: false,
+          final: true,
+          payload: {
+            call_id: held.call_id,
+            tool: held.tool,
+            output: `A human reviewer rejected this ${held.tool} call, so it did not run.${
+              note ? ` Their note: ${note}` : ''
+            }`,
+            is_error: true,
+            ms: 0,
+          },
+        }),
+      )
+    }
+
+    const finalResponse = decision.approved
+      ? held.finalResponse
+      : 'I did not send that — a reviewer rejected it.'
+
+    if (!decision.approved) {
+      events.push(
+        next({
+          type: 'run.end',
+          author: 'system',
+          partial: false,
+          final: true,
+          payload: {
+            final_response: finalResponse,
+            usage: run.usage,
+            duration_ms: run.duration_ms,
+          },
+        }),
+      )
+    }
+
+    const resumed: StoredRun = {
+      ...run,
+      final_response: finalResponse,
+      events,
+      status: 'ok',
+      held: undefined,
+    }
+    mockDb.replaceRun(resumed)
+    return HttpResponse.json(runBody(resumed))
   }),
 
   http.get(`${API}/workflows/:id/runs`, async ({ params }) => {
@@ -233,13 +449,7 @@ export const handlers = [
     await delay(200)
     const run = mockDb.run(String(params['runId']))
     if (!run) return apiError(404, 'not_found', 'That run does not exist.')
-    return HttpResponse.json({
-      run_id: run.run_id,
-      final_response: run.final_response,
-      events: run.events,
-      usage: run.usage,
-      duration_ms: run.duration_ms,
-    })
+    return HttpResponse.json(runBody(run))
   }),
 
   /* ── Mock outbox ──────────────────────────────────────────────────────── */

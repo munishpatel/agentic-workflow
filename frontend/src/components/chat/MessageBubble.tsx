@@ -2,6 +2,8 @@ import { useMemo } from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import type { ChatMessage } from '@/types/ui'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
+import type { ApprovalVerdict } from '@/components/chat/ApprovalRequest'
+import { ApprovalRequest } from '@/components/chat/ApprovalRequest'
 import { Timeline } from '@/components/chat/Timeline'
 import { reduceEvents } from '@/lib/events'
 import { RichText } from '@/lib/richText'
@@ -12,6 +14,8 @@ interface MessageBubbleProps {
   toolNames?: Record<string, string>
   /** The first assistant turn opens its timeline so the feature is discovered. */
   expandTimeline?: boolean
+  /** Absent in read-only contexts — a past run is history, not a live decision. */
+  onDecide?: (message: ChatMessage, verdicts: ApprovalVerdict[]) => void
 }
 
 export function MessageBubble({
@@ -19,6 +23,7 @@ export function MessageBubble({
   labels,
   toolNames,
   expandTimeline = false,
+  onDecide,
 }: MessageBubbleProps) {
   const view = useMemo(
     () => (message.events ? reduceEvents(message.events) : null),
@@ -62,8 +67,25 @@ export function MessageBubble({
         </Alert>
       )}
 
+      {/* Above the timeline, not inside it: the decision is the thing being
+          asked of the user, and the timeline is collapsed by default. */}
+      {onDecide && message.status === 'awaiting' && message.pendingApprovals && (
+        <ApprovalRequest
+          approvals={message.pendingApprovals}
+          toolNames={toolNames}
+          labels={labels}
+          busy={message.resuming ?? false}
+          onDecide={(verdicts) => onDecide(message, verdicts)}
+        />
+      )}
+
       {view && view.steps.length > 0 && (
-        <Timeline view={view} labels={labels} toolNames={toolNames} defaultOpen={expandTimeline} />
+        <Timeline
+          view={view}
+          labels={labels}
+          toolNames={toolNames}
+          defaultOpen={expandTimeline || message.status === 'awaiting'}
+        />
       )}
     </div>
   )

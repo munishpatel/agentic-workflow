@@ -47,6 +47,28 @@ class UnknownProviderError(AppError):
     code = "unknown_provider"
 
 
+class RunNotPausedError(AppError):
+    """
+    Resuming a run that is not waiting on anyone. 409 rather than 404 because
+    the run exists — it is the *state* the request disagrees with, and a
+    double-clicked Approve button must not read as a missing run.
+    """
+
+    status_code = 409
+    code = "run_not_paused"
+
+
+class MissingDecisionError(AppError):
+    """
+    A resume that does not rule on every held call. Rejected whole rather than
+    defaulted, because silently approving nothing and silently approving
+    everything are both worse than saying which call was left out.
+    """
+
+    status_code = 422
+    code = "missing_decision"
+
+
 # ── Errors raised inside a run ──────────────────────────────────────────────
 # These do not become HTTP errors: the run has already started, so the partial
 # timeline is worth more than a status code. The runner catches them, emits

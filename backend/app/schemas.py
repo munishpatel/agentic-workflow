@@ -123,6 +123,9 @@ class ToolMeta(BaseModel):
     name: str
     description: str
     input_schema: dict[str, Any]
+    # Lets the builder mark a gated tool where it is chosen, so "this pauses the
+    # run for a human" is visible before anyone runs the workflow.
+    requires_approval: bool = False
 
 
 class ProviderMeta(BaseModel):
@@ -149,6 +152,21 @@ class Usage(BaseModel):
     output_tokens: int = 0
 
 
+class PendingApproval(BaseModel):
+    """
+    A gated tool call the run is holding, as the reviewer needs to see it.
+
+    Response-only, so no defaults — the same rule `ValidationResult` follows. A
+    default publishes the field as optional in the OpenAPI and forces every
+    frontend call site to null-check something the server always sends.
+    """
+
+    call_id: str
+    node_id: str
+    tool: str
+    input: dict[str, Any]
+
+
 class RunResponse(BaseModel):
     run_id: str
     final_response: str
@@ -158,6 +176,31 @@ class RunResponse(BaseModel):
     events: list[RunEvent]
     usage: Usage
     duration_ms: int
+    # "paused" means the run stopped at a gated tool call and `pending_approvals`
+    # is non-empty. It is a normal 200: the timeline so far is real, and the run
+    # is neither finished nor failed.
+    #
+    # Both are response-only and carry no defaults, so the frontend gets them as
+    # required fields rather than having to null-check what is always sent.
+    status: Literal["ok", "error", "paused"]
+    pending_approvals: list[PendingApproval]
+
+
+class ApprovalDecisionInput(BaseModel):
+    call_id: str
+    approved: bool
+    # Shown to the model in the tool result, so a rejection can say why and the
+    # agent can tell the user something better than "it did not happen".
+    note: str = Field(default="", max_length=2000)
+
+
+class ResumeRunRequest(BaseModel):
+    """
+    Every held call must appear. A partial verdict is a 422 rather than an
+    implicit reject — see `MissingDecisionError`.
+    """
+
+    decisions: list[ApprovalDecisionInput] = Field(min_length=1)
 
 
 class RunSummary(BaseModel):
@@ -167,6 +210,7 @@ class RunSummary(BaseModel):
     created_at: datetime
     usage: Usage
     duration_ms: int
+    status: str
 
 
 class SentEmailRead(BaseModel):

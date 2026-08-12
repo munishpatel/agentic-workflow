@@ -30,6 +30,7 @@ class WebSearch:
         "Do not call it for stable general knowledge."
     )
     Input: ClassVar[type[BaseModel]] = WebSearchInput
+    requires_approval: ClassVar[bool] = False
     # Tavily answers in ~2s, but the Anthropic fallback runs several searches
     # plus dynamic filtering inside one call and needs longer than the default.
     timeout_seconds: ClassVar[int] = 90

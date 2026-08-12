@@ -110,7 +110,15 @@ export interface paths {
       path?: never
       cookie?: never
     }
-    /** List Providers */
+    /**
+     * List Providers
+     * @description The configured `LLM_MODEL` is listed **first**.
+     *
+     *     The builder picks `models[0]` for a newly created workflow, so this is what
+     *     makes the setting actually take effect. An unrecognised value is still
+     *     offered rather than dropped — configuring a model this build has not heard
+     *     of should not silently switch workflows to a different one.
+     */
     get: operations['list_providers_api_providers_get']
     put?: never
     post?: never
@@ -136,8 +144,41 @@ export interface paths {
      *     started, a failure comes back as **200** with a normal body whose event log
      *     ends in `run.error`: the partial timeline is what the user needs, and a 500
      *     would throw it away.
+     *
+     *     A run that hits a gated tool call also comes back **200**, with
+     *     `status="paused"` and the held calls in `pending_approvals`. Nothing has
+     *     gone wrong — it is waiting for `POST /api/runs/{run_id}/resume`.
      */
     post: operations['run_workflow_api_workflows__workflow_id__run_post']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/api/runs/{run_id}/resume': {
+    parameters: {
+      query?: never
+      header?: never
+      path?: never
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /**
+     * Resume Paused Run
+     * @description Rule on the gated calls and let the run finish.
+     *
+     *     The verdicts are matched against the checkpoint, not taken on trust: a
+     *     decision for a call this run is not holding is ignored, and a held call with
+     *     no decision is a 422. Between them, "approve" can only ever mean the exact
+     *     call the reviewer was shown.
+     *
+     *     A resume can pause again — a workflow may gate more than one call — in which
+     *     case this returns `status="paused"` with the next batch, and the row keeps
+     *     a fresh checkpoint.
+     */
+    post: operations['resume_paused_run_api_runs__run_id__resume_post']
     delete?: never
     options?: never
     head?: never
@@ -223,6 +264,18 @@ export interface paths {
 export type webhooks = Record<string, never>
 export interface components {
   schemas: {
+    /** ApprovalDecisionInput */
+    ApprovalDecisionInput: {
+      /** Call Id */
+      call_id: string
+      /** Approved */
+      approved: boolean
+      /**
+       * Note
+       * @default
+       */
+      note: string
+    }
     /** ChatTurn */
     ChatTurn: {
       /**
@@ -279,6 +332,26 @@ export interface components {
       }
       position?: components['schemas']['Position']
     }
+    /**
+     * PendingApproval
+     * @description A gated tool call the run is holding, as the reviewer needs to see it.
+     *
+     *     Response-only, so no defaults — the same rule `ValidationResult` follows. A
+     *     default publishes the field as optional in the OpenAPI and forces every
+     *     frontend call site to null-check something the server always sends.
+     */
+    PendingApproval: {
+      /** Call Id */
+      call_id: string
+      /** Node Id */
+      node_id: string
+      /** Tool */
+      tool: string
+      /** Input */
+      input: {
+        [key: string]: unknown
+      }
+    }
     /** Position */
     Position: {
       /**
@@ -300,6 +373,15 @@ export interface components {
       label: string
       /** Models */
       models: string[]
+    }
+    /**
+     * ResumeRunRequest
+     * @description Every held call must appear. A partial verdict is a 422 rather than an
+     *     implicit reject — see `MissingDecisionError`.
+     */
+    ResumeRunRequest: {
+      /** Decisions */
+      decisions: components['schemas']['ApprovalDecisionInput'][]
     }
     /**
      * RunEvent
@@ -348,6 +430,8 @@ export interface components {
         | 'tool.call'
         | 'tool.result'
         | 'route.decision'
+        | 'approval.required'
+        | 'approval.decision'
       /** Payload */
       payload?: {
         [key: string]: unknown
@@ -381,6 +465,13 @@ export interface components {
       usage: components['schemas']['Usage']
       /** Duration Ms */
       duration_ms: number
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: 'ok' | 'error' | 'paused'
+      /** Pending Approvals */
+      pending_approvals: components['schemas']['PendingApproval'][]
     }
     /** RunSummary */
     RunSummary: {
@@ -398,6 +489,8 @@ export interface components {
       usage: components['schemas']['Usage']
       /** Duration Ms */
       duration_ms: number
+      /** Status */
+      status: string
     }
     /** SentEmailRead */
     SentEmailRead: {
@@ -429,6 +522,11 @@ export interface components {
       input_schema: {
         [key: string]: unknown
       }
+      /**
+       * Requires Approval
+       * @default false
+       */
+      requires_approval: boolean
     }
     /** Usage */
     Usage: {
@@ -501,11 +599,8 @@ export interface components {
        * @default anthropic
        */
       provider: string
-      /**
-       * Model
-       * @default claude-opus-5
-       */
-      model: string
+      /** Model */
+      model?: string
       /**
        * System Prompt
        * @default
@@ -835,6 +930,41 @@ export interface operations {
     requestBody: {
       content: {
         'application/json': components['schemas']['RunRequest']
+      }
+    }
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['RunResponse']
+        }
+      }
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['HTTPValidationError']
+        }
+      }
+    }
+  }
+  resume_paused_run_api_runs__run_id__resume_post: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        run_id: string
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ResumeRunRequest']
       }
     }
     responses: {

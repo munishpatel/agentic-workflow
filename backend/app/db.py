@@ -1,5 +1,8 @@
+import logging
 from collections.abc import AsyncIterator
+from typing import Any
 
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
 
@@ -11,6 +14,8 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 # `create_all` below reads. Without it, startup creates an empty schema.
 from app import models  # noqa: F401  (imported for its side effect)
 from app.config import get_settings
+
+logger = logging.getLogger("app.db")
 
 _settings = get_settings()
 
@@ -29,6 +34,33 @@ async def create_tables() -> None:
     """
     async with engine.begin() as connection:
         await connection.run_sync(SQLModel.metadata.create_all)
+        await connection.run_sync(_add_missing_columns)
+
+
+def _add_missing_columns(connection: Any) -> None:
+    """
+    The one thing `create_all` cannot do: add a column to a table that already
+    exists.
+
+    Without this, a developer with a `workflows.db` from before a column was
+    added gets `OperationalError: no such column` on every run — a confusing
+    failure a long way from its cause. Additive only, and deliberately so: this
+    is a stopgap for new nullable columns, not a migration tool. Anything that
+    drops, renames or backfills is the point where Alembic stops being optional.
+    """
+    inspector = inspect(connection)
+    for table in SQLModel.metadata.sorted_tables:
+        if not inspector.has_table(table.name):
+            continue
+        existing = {column["name"] for column in inspector.get_columns(table.name)}
+        for column in table.columns:
+            if column.name in existing or not column.nullable:
+                continue
+            type_sql = column.type.compile(dialect=connection.dialect)
+            connection.exec_driver_sql(
+                f"ALTER TABLE {table.name} ADD COLUMN {column.name} {type_sql}"
+            )
+            logger.info("Added missing column %s.%s", table.name, column.name)
 
 
 async def get_session() -> AsyncIterator[AsyncSession]:

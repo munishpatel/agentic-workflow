@@ -90,6 +90,7 @@ class Calculator:
         "any multi-step arithmetic — rather than calculating in your head."
     )
     Input: ClassVar[type[BaseModel]] = CalculatorInput
+    requires_approval: ClassVar[bool] = False
 
     async def execute(self, args: CalculatorInput, ctx: ToolContext) -> ToolResult:
         try:

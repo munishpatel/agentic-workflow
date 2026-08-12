@@ -24,6 +24,18 @@ def tool_ids() -> list[str]:
     return list(REGISTRY)
 
 
+def requires_approval(tool_id: str) -> bool:
+    """
+    Whether a call to this tool must be held for a human verdict.
+
+    `getattr` with a safe default rather than an attribute access: an unknown
+    tool id reaches `dispatch`, which turns it into a normal tool error, and
+    that path must not raise here first.
+    """
+    tool = REGISTRY.get(tool_id)
+    return bool(getattr(tool, "requires_approval", False))
+
+
 def tool_metadata() -> list[dict[str, Any]]:
     """
     The body of `GET /api/tools`.
@@ -31,6 +43,10 @@ def tool_metadata() -> list[dict[str, Any]]:
     `Input.model_json_schema()` serves three consumers at once: the schema the
     model sees, the runtime validator in `dispatch`, and the builder's `args`
     sub-form. One definition, three uses.
+
+    `requires_approval` is published here but deliberately **not** in
+    `tool_schemas` below: the gate is the engine's business, and telling the
+    model a call is reviewed invites it to editorialise about the review.
     """
     return [
         {
@@ -38,6 +54,7 @@ def tool_metadata() -> list[dict[str, Any]]:
             "name": tool.name,
             "description": tool.description,
             "input_schema": tool.Input.model_json_schema(),
+            "requires_approval": requires_approval(tool.id),
         }
         for tool in REGISTRY.values()
     ]

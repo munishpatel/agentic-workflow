@@ -38,5 +38,10 @@ class Tool(Protocol):
     # the most common cause of an agent that never calls it.
     description: ClassVar[str]
     Input: ClassVar[type[BaseModel]]
+    # A gated tool never runs on the model's say-so alone: the engine pauses the
+    # run at the call and waits for a human verdict (app/engine/checkpoint.py).
+    # It is a property of the tool rather than of the workflow deliberately —
+    # the gate must not be something a graph can forget to switch on.
+    requires_approval: ClassVar[bool]
 
     async def execute(self, args: BaseModel, ctx: ToolContext) -> ToolResult: ...

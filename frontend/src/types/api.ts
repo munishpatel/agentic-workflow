@@ -128,3 +128,9 @@ export type RunResponse = Omit<Schemas['RunResponse'], 'events'> & {
 
 export type RunSummary = Schemas['RunSummary']
 export type SentEmail = Schemas['SentEmailRead']
+
+/* ── Approvals ───────────────────────────────────────────────────────────── */
+
+export type PendingApproval = Schemas['PendingApproval']
+export type ApprovalDecisionInput = Schemas['ApprovalDecisionInput']
+export type ResumeRunRequest = Schemas['ResumeRunRequest']

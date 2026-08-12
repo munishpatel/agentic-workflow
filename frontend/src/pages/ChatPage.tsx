@@ -2,7 +2,8 @@ import { useMemo } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { ChatTurn } from '@/types/api'
+import type { ChatTurn, RunResponse } from '@/types/api'
+import type { ChatMessage } from '@/types/ui'
 import { Button } from '@/components/ui/button'
 import {
   Select,
@@ -14,13 +15,14 @@ import {
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ErrorState } from '@/components/common/ErrorState'
+import type { ApprovalVerdict } from '@/components/chat/ApprovalRequest'
 import { Composer } from '@/components/chat/Composer'
 import { MessageList } from '@/components/chat/MessageList'
 import { PastRunsSheet } from '@/components/chat/PastRunsSheet'
 import { useChatSession } from '@/hooks/useChatSession'
 import { ApiError, describeError } from '@/lib/client'
 import { reduceEvents } from '@/lib/events'
-import { useRunWorkflow, useTools, useWorkflow, useWorkflows } from '@/lib/queries'
+import { useResumeRun, useRunWorkflow, useTools, useWorkflow, useWorkflows } from '@/lib/queries'
 import { createId, formatMs, formatTokens } from '@/lib/utils'
 
 export function ChatPage() {
@@ -31,6 +33,7 @@ export function ChatPage() {
   const workflows = useWorkflows()
   const tools = useTools()
   const runWorkflow = useRunWorkflow()
+  const resumeRun = useResumeRun()
   const { messages, setMessages, clear } = useChatSession(id)
 
   const labels = useMemo(() => {
@@ -45,6 +48,11 @@ export function ChatPage() {
     return map
   }, [tools.data])
 
+  const awaitingApproval = useMemo(
+    () => messages.some((message) => message.status === 'awaiting'),
+    [messages],
+  )
+
   const totals = useMemo(() => {
     let tokens = 0
     let ms = 0
@@ -56,7 +64,63 @@ export function ChatPage() {
     return { tokens, ms }
   }, [messages])
 
+  /**
+   * A run response — from `/run` or `/resume` — folded onto the turn that owns
+   * it. Both endpoints return the same shape, so a paused run, a resumed one
+   * and one that pauses a *second* time all land here with no special cases.
+   */
+  function applyRun(messageId: string, run: RunResponse): void {
+    const view = reduceEvents(run.events)
+    // A run can fail *inside* a 200 — a refusal, say. The event log is
+    // the source of truth for whether the answer is usable.
+    const failure = view.error
+      ? describeError(new ApiError(200, view.error.code, view.error.message))
+      : null
+    const awaiting = run.status === 'paused' && run.pending_approvals.length > 0
+
+    setMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId
+          ? {
+              ...message,
+              content: run.final_response,
+              runId: run.run_id,
+              events: run.events,
+              usage: run.usage,
+              durationMs: run.duration_ms,
+              status: failure ? 'error' : awaiting ? 'awaiting' : 'ok',
+              resuming: false,
+              ...(failure ? { error: failure } : {}),
+              pendingApprovals: awaiting
+                ? run.pending_approvals.map((approval) => ({
+                    callId: approval.call_id,
+                    nodeId: approval.node_id,
+                    tool: approval.tool,
+                    input: approval.input,
+                  }))
+                : undefined,
+            }
+          : message,
+      ),
+    )
+  }
+
+  function markFailed(messageId: string, error: unknown): void {
+    const described = describeError(error)
+    toast.error(described.title, { description: described.description })
+    setMessages((previous) =>
+      previous.map((message) =>
+        message.id === messageId
+          ? { ...message, status: 'error', resuming: false, error: described }
+          : message,
+      ),
+    )
+  }
+
   function handleSend(text: string) {
+    // A turn still awaiting approval has no usable content and is deliberately
+    // left out of the history — the model must not be told a send happened
+    // while a human is still deciding whether it will.
     const history: ChatTurn[] = messages
       .filter((message) => message.status === 'ok' && message.content)
       .map((message) => ({ role: message.role, content: message.content }))
@@ -71,42 +135,33 @@ export function ChatPage() {
     runWorkflow.mutate(
       { id, request: { message: text, history } },
       {
-        onSuccess: (run) => {
-          const view = reduceEvents(run.events)
-          // A run can fail *inside* a 200 — a refusal, say. The event log is
-          // the source of truth for whether the answer is usable.
-          const failure = view.error
-            ? describeError(new ApiError(200, view.error.code, view.error.message))
-            : null
+        onSuccess: (run) => applyRun(pendingId, run),
+        onError: (error) => markFailed(pendingId, error),
+      },
+    )
+  }
 
-          setMessages((previous) =>
-            previous.map((message) =>
-              message.id === pendingId
-                ? {
-                    ...message,
-                    content: run.final_response,
-                    runId: run.run_id,
-                    events: run.events,
-                    usage: run.usage,
-                    durationMs: run.duration_ms,
-                    status: failure ? 'error' : 'ok',
-                    ...(failure ? { error: failure } : {}),
-                  }
-                : message,
-            ),
-          )
+  function handleDecide(message: ChatMessage, verdicts: ApprovalVerdict[]) {
+    if (!message.runId) return
+
+    setMessages((previous) =>
+      previous.map((entry) => (entry.id === message.id ? { ...entry, resuming: true } : entry)),
+    )
+
+    resumeRun.mutate(
+      {
+        runId: message.runId,
+        request: {
+          decisions: verdicts.map((verdict) => ({
+            call_id: verdict.callId,
+            approved: verdict.approved,
+            note: verdict.note,
+          })),
         },
-        onError: (error) => {
-          const described = describeError(error)
-          toast.error(described.title, { description: described.description })
-          setMessages((previous) =>
-            previous.map((message) =>
-              message.id === pendingId
-                ? { ...message, status: 'error', error: described }
-                : message,
-            ),
-          )
-        },
+      },
+      {
+        onSuccess: (run) => applyRun(message.id, run),
+        onError: (error) => markFailed(message.id, error),
       },
     )
   }
@@ -186,7 +241,12 @@ export function ChatPage() {
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl px-6 py-6">
-          <MessageList messages={messages} labels={labels} toolNames={toolNames} />
+          <MessageList
+            messages={messages}
+            labels={labels}
+            toolNames={toolNames}
+            onDecide={handleDecide}
+          />
         </div>
       </div>
 
@@ -194,11 +254,20 @@ export function ChatPage() {
         <div className="mx-auto max-w-3xl">
           <Composer
             onSend={handleSend}
-            disabled={runWorkflow.isPending}
-            placeholder={`Message ${workflow.data.name}…`}
+            // A paused run is still going. Starting a second one would strand
+            // the approval — the reviewer would be ruling on a call from a
+            // conversation that has already moved on.
+            disabled={runWorkflow.isPending || resumeRun.isPending || awaitingApproval}
+            placeholder={
+              awaitingApproval
+                ? 'Approve or reject the pending action to continue…'
+                : `Message ${workflow.data.name}…`
+            }
           />
           <p className="mt-1.5 text-center text-xs text-muted-foreground">
-            Enter to send · Shift+Enter for a new line
+            {awaitingApproval
+              ? 'This workflow is paused for approval'
+              : 'Enter to send · Shift+Enter for a new line'}
           </p>
         </div>
       </div>

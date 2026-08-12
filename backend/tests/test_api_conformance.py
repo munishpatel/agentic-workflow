@@ -38,8 +38,14 @@ async def app_and_client(tmp_path, monkeypatch):
     application = app.main.app
     application.state.providers = {}
     transport = ASGITransport(app=application)
-    async with AsyncClient(transport=transport, base_url="http://test") as http:
-        yield application, http
+    try:
+        async with AsyncClient(transport=transport, base_url="http://test") as http:
+            yield application, http
+    finally:
+        # Each test reloads `app.db` and gets a fresh engine. Without disposing
+        # it, aiosqlite's worker thread outlives the test's event loop and
+        # occasionally raises "Event loop is closed" into an unrelated test.
+        await app.db.engine.dispose()
 
 
 @pytest.fixture
@@ -283,14 +289,162 @@ class TestOutbox:
                 ]
             ),
         )
-        await client.post(
-            f"/api/workflows/{workflow_id}/run", json={"message": "email the team", "history": []}
+        run = (
+            await client.post(
+                f"/api/workflows/{workflow_id}/run",
+                json={"message": "email the team", "history": []},
+            )
+        ).json()
+
+        # send_email is gated, so the run holds rather than sending.
+        assert run["status"] == "paused"
+        assert (await client.get("/api/emails")).json() == []
+
+        resumed = await client.post(
+            f"/api/runs/{run['run_id']}/resume",
+            json={"decisions": [{"call_id": "t1", "approved": True}]},
         )
+        assert resumed.status_code == 200, resumed.json()
+        assert resumed.json()["status"] == "ok"
 
         emails = (await client.get("/api/emails")).json()
         assert len(emails) == 1
         assert emails[0]["to"] == "team@example.com"
         assert emails[0]["run_id"] is not None
+
+
+class TestApprovalEndpoint:
+    """
+    The resume endpoint's job is to make "approve" mean exactly the call the
+    reviewer was shown, and to make every other request bounce off.
+    """
+
+    async def _pause(self, application, client) -> tuple[str, dict]:
+        from tests.fakes import tool_call_response
+
+        workflow_id = await seed_workflow(client, MATH_HELPER)
+        use_provider(
+            application,
+            FakeProvider(
+                [
+                    tool_call_response(
+                        "send_email",
+                        {"to": "team@example.com", "subject": "Hi", "body": "Hello."},
+                        call_id="t1",
+                    ),
+                    text_response("Sent."),
+                ]
+            ),
+        )
+        run = (
+            await client.post(
+                f"/api/workflows/{workflow_id}/run",
+                json={"message": "email the team", "history": []},
+            )
+        ).json()
+        return workflow_id, run
+
+    async def test_a_paused_run_is_a_200_with_its_held_calls(self, app_and_client) -> None:
+        application, client = app_and_client
+        _, run = await self._pause(application, client)
+
+        assert run["status"] == "paused"
+        assert run["final_response"] == ""
+        held = run["pending_approvals"]
+        assert len(held) == 1
+        assert held[0]["tool"] == "send_email"
+        assert held[0]["call_id"] == "t1"
+        assert held[0]["input"]["to"] == "team@example.com"
+
+    async def test_a_paused_run_replays_with_its_held_calls_intact(self, app_and_client) -> None:
+        """Reopening the page must not lose an approval someone walked away from."""
+        application, client = app_and_client
+        _, run = await self._pause(application, client)
+
+        replayed = (await client.get(f"/api/runs/{run['run_id']}")).json()
+        assert replayed["status"] == "paused"
+        assert [call["call_id"] for call in replayed["pending_approvals"]] == ["t1"]
+
+    async def test_resuming_an_unknown_run_is_404(self, client) -> None:
+        response = await client.post(
+            "/api/runs/run_nope/resume",
+            json={"decisions": [{"call_id": "t1", "approved": True}]},
+        )
+        assert response.status_code == 404
+        assert response.json()["error"]["code"] == "not_found"
+
+    async def test_resuming_a_finished_run_is_409(self, app_and_client) -> None:
+        """A double-clicked Approve must not send twice."""
+        application, client = app_and_client
+        _, run = await self._pause(application, client)
+
+        first = await client.post(
+            f"/api/runs/{run['run_id']}/resume",
+            json={"decisions": [{"call_id": "t1", "approved": True}]},
+        )
+        assert first.status_code == 200
+
+        second = await client.post(
+            f"/api/runs/{run['run_id']}/resume",
+            json={"decisions": [{"call_id": "t1", "approved": True}]},
+        )
+        assert second.status_code == 409
+        assert second.json()["error"]["code"] == "run_not_paused"
+        # And crucially: still one email, not two.
+        assert len((await client.get("/api/emails")).json()) == 1
+
+    async def test_a_decision_for_a_call_this_run_is_not_holding_is_422(
+        self, app_and_client
+    ) -> None:
+        application, client = app_and_client
+        _, run = await self._pause(application, client)
+
+        response = await client.post(
+            f"/api/runs/{run['run_id']}/resume",
+            json={"decisions": [{"call_id": "some_other_call", "approved": True}]},
+        )
+        assert response.status_code == 422
+        body = response.json()
+        assert body["error"]["code"] == "missing_decision"
+        assert body["error"]["details"]["missing_call_ids"] == ["t1"]
+        # Nothing ran, and the run is still waiting.
+        assert (await client.get("/api/emails")).json() == []
+        assert (await client.get(f"/api/runs/{run['run_id']}")).json()["status"] == "paused"
+
+    async def test_rejecting_finishes_the_run_and_sends_nothing(self, app_and_client) -> None:
+        application, client = app_and_client
+        _, run = await self._pause(application, client)
+
+        resumed = (
+            await client.post(
+                f"/api/runs/{run['run_id']}/resume",
+                json={
+                    "decisions": [{"call_id": "t1", "approved": False, "note": "Wrong recipient."}]
+                },
+            )
+        ).json()
+
+        assert resumed["status"] == "ok"
+        assert resumed["pending_approvals"] == []
+        assert (await client.get("/api/emails")).json() == []
+
+    async def test_the_resumed_run_replaces_the_row_rather_than_adding_one(
+        self, app_and_client
+    ) -> None:
+        """One run, one row, one timeline — history must not show it twice."""
+        application, client = app_and_client
+        workflow_id, run = await self._pause(application, client)
+
+        await client.post(
+            f"/api/runs/{run['run_id']}/resume",
+            json={"decisions": [{"call_id": "t1", "approved": True}]},
+        )
+
+        runs = (await client.get(f"/api/workflows/{workflow_id}/runs")).json()
+        matching = [row for row in runs if row["run_id"] == run["run_id"]]
+        assert len(matching) == 1
+        assert matching[0]["status"] == "ok"
+        assert matching[0]["final_response"] == "Sent."
 
 
 class TestHistoryIsPassedThrough:

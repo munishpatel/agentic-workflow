@@ -9,8 +9,13 @@ function load(workflowId: string): ChatMessage[] {
     if (!raw) return []
     const parsed: unknown = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    // A message left mid-flight when the tab closed can never resolve.
-    return (parsed as ChatMessage[]).filter((message) => message.status !== 'pending')
+    // A message left mid-flight when the tab closed can never resolve. A turn
+    // left *awaiting approval* is different: the run is genuinely parked on the
+    // server, so it survives the refresh — only the in-flight `resuming` flag
+    // is dropped, or its buttons would come back permanently disabled.
+    return (parsed as ChatMessage[])
+      .filter((message) => message.status !== 'pending')
+      .map((message) => (message.resuming ? { ...message, resuming: false } : message))
   } catch {
     return []
   }

@@ -5,6 +5,12 @@ import type { PortRef, RunEvent, Usage } from '@/types/events'
 
 /* ── Timeline (the output of lib/events.ts) ──────────────────────────────── */
 
+/**
+ * A gated call's position in the review. Absent entirely on the ungated calls,
+ * which is most of them — `undefined` means "no gate", not "not yet decided".
+ */
+export type ApprovalState = 'awaiting' | 'approved' | 'rejected'
+
 export interface ToolEntry {
   type: 'tool'
   callId: string
@@ -15,6 +21,9 @@ export interface ToolEntry {
   isError: boolean
   ms?: number
   pending: boolean
+  approval?: ApprovalState
+  /** The reviewer's reason, once they have given one. */
+  approvalNote?: string
 }
 
 export interface RouteEntry {
@@ -40,8 +49,12 @@ export interface LlmEntry {
 
 export type NodeEntry = ToolEntry | RouteEntry | MessageEntry | LlmEntry
 
-/** `failed` = the run ended while this node was still open. */
-export type NodeStatus = 'running' | 'done' | 'skipped' | 'failed'
+/**
+ * `failed` = the run ended while this node was still open.
+ * `awaiting` = it is holding a gated tool call and cannot move until a human
+ * rules on it — a distinct state from `running`, because nothing is happening.
+ */
+export type NodeStatus = 'running' | 'done' | 'skipped' | 'failed' | 'awaiting'
 
 export interface NodeStep {
   kind: 'node'
@@ -77,13 +90,27 @@ export interface TimelineError {
 export interface TimelineView {
   runId: string | null
   workflowName: string | null
-  status: 'running' | 'ok' | 'error'
+  /** `paused` = stopped at a gated tool call, waiting on a human. */
+  status: 'running' | 'ok' | 'error' | 'paused'
   steps: TimelineStep[]
   finalResponse: string
   usage: Usage
   durationMs: number
   error: TimelineError | null
+  /**
+   * The calls still awaiting a verdict, derived from the log. The server sends
+   * the same list on a paused run; deriving it here too is what lets a replayed
+   * run render its pending approvals without a second request.
+   */
+  pendingApprovals: PendingApprovalEntry[]
   counts: { nodes: number; toolCalls: number }
+}
+
+export interface PendingApprovalEntry {
+  callId: string
+  nodeId: string | null
+  tool: string
+  input: Record<string, unknown>
 }
 
 /* ── Chat ────────────────────────────────────────────────────────────────── */
@@ -97,7 +124,16 @@ export interface ChatMessage {
   events?: RunEvent[]
   usage?: Usage
   durationMs?: number
-  status: 'pending' | 'ok' | 'error'
+  /**
+   * `awaiting` = the run paused for approval. It is not `pending` (nothing is
+   * running) and not `error` (nothing went wrong) — the distinction is what
+   * stops the composer being disabled while a reviewer thinks.
+   */
+  status: 'pending' | 'ok' | 'error' | 'awaiting'
   /** Set when the request itself failed, before any events existed. */
   error?: { title: string; description?: string }
+  /** The calls this turn is holding. Only present while `status === 'awaiting'`. */
+  pendingApprovals?: PendingApprovalEntry[]
+  /** True while a verdict is in flight, so the buttons can disable themselves. */
+  resuming?: boolean
 }

@@ -185,3 +185,129 @@ describe('runs', () => {
     expect((await noKey.json()).error.code).toBe('missing_api_key')
   })
 })
+
+describe('approvals', () => {
+  async function pause(): Promise<RunResponse> {
+    return (
+      await fetch(`${BASE}/workflows/wf_math/run`, {
+        method: 'POST',
+        body: JSON.stringify({ message: 'email the team the digest', history: [] }),
+      })
+    ).json()
+  }
+
+  async function resume(runId: string, approved: boolean, note = ''): Promise<Response> {
+    return fetch(`${BASE}/runs/${runId}/resume`, {
+      method: 'POST',
+      body: JSON.stringify({ decisions: [{ call_id: 'call_email_1', approved, note }] }),
+    })
+  }
+
+  it('holds the gated call instead of running it', async () => {
+    const run = await pause()
+
+    expect(run.status).toBe('paused')
+    expect(run.final_response).toBe('')
+    expect(run.pending_approvals).toEqual([
+      {
+        call_id: 'call_email_1',
+        node_id: 'm_agent',
+        tool: 'send_email',
+        input: {
+          to: 'team@example.com',
+          subject: 'Weekly research digest',
+          body: 'Three sources on typed agent graphs, summarised.',
+        },
+      },
+    ])
+
+    // The log stops at the request, with no result and no end.
+    expect(run.events.at(-1)?.type).toBe('approval.required')
+    expect(run.events.some((event) => event.type === 'tool.result')).toBe(false)
+    expect(run.events.some((event) => event.type === 'run.end')).toBe(false)
+
+    // And nothing was sent. This is the assertion the feature exists for.
+    const emails = await (await fetch(`${BASE}/emails`)).json()
+    expect(emails.some((email: { run_id: string }) => email.run_id === run.run_id)).toBe(false)
+  })
+
+  it('replays a paused run with its held call intact', async () => {
+    const run = await pause()
+    const replayed: RunResponse = await (await fetch(`${BASE}/runs/${run.run_id}`)).json()
+    expect(replayed.status).toBe('paused')
+    expect(replayed.pending_approvals).toEqual(run.pending_approvals)
+  })
+
+  it('approving sends it and finishes the run on one continued timeline', async () => {
+    const run = await pause()
+    const resumed: RunResponse = await (await resume(run.run_id, true)).json()
+
+    expect(resumed.run_id).toBe(run.run_id)
+    expect(resumed.status).toBe('ok')
+    expect(resumed.pending_approvals).toEqual([])
+    expect(resumed.final_response).not.toBe('')
+
+    const seqs = resumed.events.map((event) => event.seq)
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b))
+    expect(new Set(seqs).size).toBe(seqs.length)
+    expect(resumed.events.filter((event) => event.type === 'run.start')).toHaveLength(1)
+    expect(resumed.events.at(-1)?.type).toBe('run.end')
+
+    const emails = await (await fetch(`${BASE}/emails`)).json()
+    expect(emails.some((email: { run_id: string }) => email.run_id === run.run_id)).toBe(true)
+
+    // One run, one row — history must not show it twice.
+    const history = await (await fetch(`${BASE}/workflows/wf_math/runs`)).json()
+    expect(history.filter((row: { run_id: string }) => row.run_id === run.run_id)).toHaveLength(1)
+  })
+
+  it('rejecting finishes the run and sends nothing', async () => {
+    const run = await pause()
+    const resumed: RunResponse = await (await resume(run.run_id, false, 'Wrong recipient.')).json()
+
+    expect(resumed.status).toBe('ok')
+    const decision = resumed.events.find((event) => event.type === 'approval.decision')
+    expect(decision?.payload).toMatchObject({ approved: false, note: 'Wrong recipient.' })
+
+    const result = resumed.events.find((event) => event.type === 'tool.result')
+    expect(result?.payload).toMatchObject({ is_error: true })
+
+    const emails = await (await fetch(`${BASE}/emails`)).json()
+    expect(emails.some((email: { run_id: string }) => email.run_id === run.run_id)).toBe(false)
+  })
+
+  it('refuses a second resume so a double click cannot send twice', async () => {
+    const run = await pause()
+    expect((await resume(run.run_id, true)).status).toBe(200)
+
+    const second = await resume(run.run_id, true)
+    expect(second.status).toBe(409)
+    expect((await second.json()).error.code).toBe('run_not_paused')
+
+    const emails = await (await fetch(`${BASE}/emails`)).json()
+    expect(emails.filter((email: { run_id: string }) => email.run_id === run.run_id)).toHaveLength(
+      1,
+    )
+  })
+
+  it('rejects a resume that rules on the wrong call', async () => {
+    const run = await pause()
+    const response = await fetch(`${BASE}/runs/${run.run_id}/resume`, {
+      method: 'POST',
+      body: JSON.stringify({ decisions: [{ call_id: 'call_other', approved: true }] }),
+    })
+    expect(response.status).toBe(422)
+    expect((await response.json()).error.code).toBe('missing_decision')
+
+    const still: RunResponse = await (await fetch(`${BASE}/runs/${run.run_id}`)).json()
+    expect(still.status).toBe('paused')
+  })
+
+  it('publishes which tools are gated', async () => {
+    const tools: { id: string; requires_approval: boolean }[] = await (
+      await fetch(`${BASE}/tools`)
+    ).json()
+    const gated = tools.filter((tool) => tool.requires_approval).map((tool) => tool.id)
+    expect(gated).toEqual(['send_email'])
+  })
+})
