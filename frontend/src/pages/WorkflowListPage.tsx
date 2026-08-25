@@ -50,16 +50,12 @@ export function WorkflowListPage() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<WorkflowSummary | null>(null)
 
-  function handleCreate(values: NewWorkflowValues) {
+  async function handleCreate(values: NewWorkflowValues) {
     const provider = providers.data?.[0]
-    createWorkflow.mutate(workflowInputFromDialog(values, provider), {
-      onSuccess: (workflow) => {
-        setDialogOpen(false)
-        toast.success(`Created “${workflow.name}”`)
-        void navigate(`/workflows/${workflow.id}/edit`)
-      },
-      onError: reportError,
-    })
+    const workflow = await createWorkflow.mutateAsync(workflowInputFromDialog(values, provider))
+    setDialogOpen(false)
+    toast.success(`Created “${workflow.name}”`)
+    void navigate(`/workflows/${workflow.id}/edit`)
   }
 
   function handleDuplicate(id: string) {

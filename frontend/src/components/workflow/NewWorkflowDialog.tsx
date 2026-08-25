@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { Loader2, Plus } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -17,6 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { ToolPicker } from '@/components/builder/ToolPicker'
+import { ApiError, describeError } from '@/lib/client'
 import { useNodeKinds } from '@/lib/queries'
 import { describeSchema } from '@/lib/jsonSchema'
 import type { NewWorkflowValues } from '@/lib/workflowDefaults'
@@ -36,7 +38,8 @@ const EMPTY: NewWorkflowValues = {
 interface NewWorkflowDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSubmit: (values: NewWorkflowValues) => void
+  /** Rejecting lands the failure here — a duplicate name is shown inline, anything else as a toast. */
+  onSubmit: (values: NewWorkflowValues) => Promise<void>
   pending: boolean
   trigger?: React.ReactNode
 }
@@ -56,8 +59,22 @@ export function NewWorkflowDialog({
     control,
     watch,
     setValue,
+    setError,
     formState: { errors },
   } = form
+
+  async function submit(values: NewWorkflowValues) {
+    try {
+      await onSubmit(values)
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'duplicate_name') {
+        setError('name', { type: 'manual', message: error.message })
+        return
+      }
+      const { title, description } = describeError(error)
+      toast.error(title, { description })
+    }
+  }
 
   const useDefaults = watch('useDefaults')
   const toolsEnabled = watch('toolsEnabled')
@@ -81,7 +98,7 @@ export function NewWorkflowDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
       <DialogContent className="sm:max-w-md">
-        <form onSubmit={handleSubmit(onSubmit)} noValidate>
+        <form onSubmit={handleSubmit(submit)} noValidate>
           <DialogHeader>
             <DialogTitle>New workflow</DialogTitle>
             <DialogDescription>

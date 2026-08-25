@@ -122,8 +122,22 @@ export function useDuplicateWorkflow() {
     mutationFn: async (id: string) => {
       const source = await api.get<Workflow>(`/workflows/${id}`)
       const { name, description, provider, model, system_prompt, nodes, edges } = source
+
+      // The backend rejects duplicate names, so duplicating the same workflow
+      // twice needs a name that has not been taken yet — "(copy)", then
+      // "(copy 2)", "(copy 3)", ... — rather than colliding on the second try.
+      const taken = new Set(
+        (queryClient.getQueryData<WorkflowSummary[]>(queryKeys.workflows) ?? []).map((w) =>
+          w.name.trim().toLowerCase(),
+        ),
+      )
+      let candidate = `${name} (copy)`
+      for (let n = 2; taken.has(candidate.toLowerCase()); n += 1) {
+        candidate = `${name} (copy ${n})`
+      }
+
       return api.post<Workflow>('/workflows', {
-        name: `${name} (copy)`,
+        name: candidate,
         description,
         provider,
         model,

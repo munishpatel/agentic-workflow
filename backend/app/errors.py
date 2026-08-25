@@ -34,6 +34,17 @@ class ValidationFailedError(AppError):
     code = "validation_error"
 
 
+class DuplicateNameError(AppError):
+    """
+    A workflow name that collides (case-insensitively) with an existing one.
+    409 rather than 422: the payload is well-formed, it's the current state of
+    the store it conflicts with.
+    """
+
+    status_code = 409
+    code = "duplicate_name"
+
+
 class MissingAPIKeyError(AppError):
     status_code = 503
     code = "missing_api_key"

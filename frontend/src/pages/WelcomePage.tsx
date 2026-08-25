@@ -5,7 +5,6 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { NewWorkflowDialog, type NewWorkflowValues } from '@/components/workflow/NewWorkflowDialog'
-import { describeError } from '@/lib/client'
 import { useCreateWorkflow, useProviders } from '@/lib/queries'
 import { workflowInputFromDialog } from '@/lib/workflowDefaults'
 
@@ -78,19 +77,12 @@ export function WelcomePage() {
   const createWorkflow = useCreateWorkflow()
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  function handleCreate(values: NewWorkflowValues) {
+  async function handleCreate(values: NewWorkflowValues) {
     const provider = providers.data?.[0]
-    createWorkflow.mutate(workflowInputFromDialog(values, provider), {
-      onSuccess: (workflow) => {
-        setDialogOpen(false)
-        toast.success(`Created “${workflow.name}”`)
-        void navigate(`/workflows/${workflow.id}/edit`)
-      },
-      onError: (error) => {
-        const { title, description } = describeError(error)
-        toast.error(title, { description })
-      },
-    })
+    const workflow = await createWorkflow.mutateAsync(workflowInputFromDialog(values, provider))
+    setDialogOpen(false)
+    toast.success(`Created “${workflow.name}”`)
+    void navigate(`/workflows/${workflow.id}/edit`)
   }
 
   return (

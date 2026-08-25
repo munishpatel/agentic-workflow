@@ -1,11 +1,11 @@
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Response, status
-from sqlmodel import col, select
+from sqlmodel import col, func, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from app.db import get_session
-from app.errors import NotFoundError
+from app.errors import DuplicateNameError, NotFoundError
 from app.graph.types import ValidationResult
 from app.graph.validate import validate_graph
 from app.models import Workflow
@@ -27,6 +27,19 @@ async def _load(session: AsyncSession, workflow_id: str) -> Workflow:
     return row
 
 
+async def _check_name_available(
+    session: AsyncSession, name: str, *, exclude_id: str | None = None
+) -> None:
+    """Case/whitespace-insensitive, since 'Research assistant' and 'research
+    assistant ' reading as distinct is a footgun, not a feature."""
+    query = select(Workflow).where(func.lower(Workflow.name) == name.strip().lower())
+    if exclude_id is not None:
+        query = query.where(col(Workflow.id) != exclude_id)
+    existing = (await session.exec(query)).first()
+    if existing is not None:
+        raise DuplicateNameError(f'A workflow named "{name.strip()}" already exists.')
+
+
 @router.get("", response_model=list[WorkflowSummary])
 async def list_workflows(session: AsyncSession = Depends(get_session)) -> list[WorkflowSummary]:
     """Summaries, not full graphs — the list page never needs the nodes."""
@@ -38,6 +51,7 @@ async def list_workflows(session: AsyncSession = Depends(get_session)) -> list[W
 async def create_workflow(
     payload: WorkflowInput, session: AsyncSession = Depends(get_session)
 ) -> WorkflowRead:
+    await _check_name_available(session, payload.name)
     nodes, edges = graph_to_columns(payload)
     row = Workflow(
         name=payload.name,
@@ -68,6 +82,7 @@ async def update_workflow(
     session: AsyncSession = Depends(get_session),
 ) -> WorkflowRead:
     row = await _load(session, workflow_id)
+    await _check_name_available(session, payload.name, exclude_id=workflow_id)
     nodes, edges = graph_to_columns(payload)
     row.name = payload.name
     row.description = payload.description

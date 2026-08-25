@@ -175,6 +175,52 @@ class TestWorkflowCrud:
         assert (await client.get(f"/api/workflows/{created['id']}")).status_code == 404
 
 
+class TestDuplicateWorkflowNames:
+    async def test_create_rejects_an_exact_name_match(self, client: AsyncClient) -> None:
+        await client.post("/api/workflows", json=workflow_input())
+        response = await client.post("/api/workflows", json=workflow_input())
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "duplicate_name"
+
+    async def test_create_rejects_a_case_and_whitespace_insensitive_match(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/api/workflows", json=workflow_input())
+        response = await client.post(
+            "/api/workflows",
+            json=workflow_input(name=f"  {RESEARCH_ASSISTANT['name'].upper()}  "),
+        )
+        assert response.status_code == 409
+
+    async def test_update_rejects_renaming_onto_another_workflow(
+        self, client: AsyncClient
+    ) -> None:
+        await client.post("/api/workflows", json=workflow_input())
+        other = (
+            await client.post(
+                "/api/workflows",
+                json=workflow_input(
+                    name=MATH_HELPER["name"],
+                    nodes=MATH_HELPER["nodes"],
+                    edges=MATH_HELPER["edges"],
+                ),
+            )
+        ).json()
+        response = await client.put(
+            f"/api/workflows/{other['id']}", json=workflow_input(name=RESEARCH_ASSISTANT["name"])
+        )
+        assert response.status_code == 409
+        assert response.json()["error"]["code"] == "duplicate_name"
+
+    async def test_update_allows_keeping_its_own_current_name(self, client: AsyncClient) -> None:
+        created = (await client.post("/api/workflows", json=workflow_input())).json()
+        response = await client.put(
+            f"/api/workflows/{created['id']}", json=workflow_input(description="Updated.")
+        )
+        assert response.status_code == 200
+        assert response.json()["name"] == RESEARCH_ASSISTANT["name"]
+
+
 class TestErrorEnvelope:
     async def test_missing_workflow_returns_the_documented_shape(self, client: AsyncClient) -> None:
         response = await client.get("/api/workflows/wf_nope")
